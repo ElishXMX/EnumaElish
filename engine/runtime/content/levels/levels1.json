@@ -1,0 +1,40 @@
+{
+    "levels": [
+        {
+            "name": "level1",
+            "path": "levels/level1.json",
+            "entities": [
+                {
+                    "name": "hylian_shield",
+                    "model_paths": "engine/runtime/content/models/hylian_shield.obj",
+                    "model_texture_map": 
+                    [   "engine/runtime/content/textures/hylian_shield_c.png",
+                        "engine/runtime/content/textures/hylian_shield_m.png",
+                        "engine/runtime/content/textures/hylian_shield_r.png",
+                        "engine/runtime/content/textures/hylian_shield_n.png",
+                        "engine/runtime/content/textures/hylian_shield_o.png"]
+                },
+                {
+                    "name": "master_sword",
+                    "model_paths": "engine/runtime/content/models/master_sword.obj",
+                    "model_texture_map": 
+                    [   "engine/runtime/content/textures/master_sword_c.png",
+                        "engine/runtime/content/textures/master_sword_m.png",
+                        "engine/runtime/content/textures/master_sword_r.png",
+                        "engine/runtime/content/textures/master_sword_n.png",
+                        "engine/runtime/content/textures/master_sword_o.png"]
+                },
+                {
+                    "name": "steath",
+                    "model_paths": "engine/runtime/content/models/steath.obj",
+                    "model_texture_map": 
+                    [   "engine/runtime/content/textures/steath_c.png",
+                        "engine/runtime/content/textures/steath_m.png",
+                        "engine/runtime/content/textures/steath_r.png",
+                        "engine/runtime/content/textures/steath_n.png",
+                        "engine/runtime/content/textures/steath_o.png"]
+                }  
+            ]
+        }
+    ]
+}
