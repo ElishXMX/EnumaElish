@@ -305,4 +305,6 @@ namespace Elish
 
     std::shared_ptr<RHI>          RenderSystem::getRHI() const { return m_rhi; }
 
+    std::shared_ptr<RenderPipelineBase> RenderSystem::getRenderPipeline() const { return m_render_pipeline; }
+
 }

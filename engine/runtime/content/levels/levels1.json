@@ -33,6 +33,16 @@
                         "engine/runtime/content/textures/steath_r.png",
                         "engine/runtime/content/textures/steath_n.png",
                         "engine/runtime/content/textures/steath_o.png"]
+                }  ,
+                {
+                    "name": "platform",
+                    "model_paths": "engine/runtime/content/models/platform.obj",
+                    "model_texture_map": 
+                    [   "engine/runtime/content/textures/steath_c.png",
+                        "engine/runtime/content/textures/steath_m.png",
+                        "engine/runtime/content/textures/steath_r.png",
+                        "engine/runtime/content/textures/steath_n.png",
+                        "engine/runtime/content/textures/steath_o.png"]
                 }  
             ]
         }

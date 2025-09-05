@@ -89,7 +89,11 @@ namespace Elish
 
         virtual void draw();
 
-        // virtual RHIRenderPass*                       getRenderPass() const;
+        /**
+         * @brief 获取渲染通道
+         * @return 渲染通道指针
+         */
+        virtual RHIRenderPass* getRenderPass() const { return m_framebuffer.render_pass; }
         // virtual std::vector<RHIImageView*>           getFramebufferImageViews() const;
         // virtual std::vector<RHIDescriptorSetLayout*> getDescriptorSetLayouts() const;
 

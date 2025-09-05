@@ -23,6 +23,12 @@ namespace Elish
                                    std::shared_ptr<RenderResource> render_resource) = 0;
 
         virtual void preparePassData(std::shared_ptr<RenderResource> render_resource);
+        
+        /**
+         * @brief 获取主相机渲染通道
+         * @return 主相机渲染通道的共享指针
+         */
+        std::shared_ptr<RenderPassBase> getMainCameraPass() const { return m_main_camera_pass; }
 
     protected:
         std::shared_ptr<RHI> m_rhi;
