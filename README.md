@@ -25,16 +25,14 @@ git clone https://github.com/yourusername/EnumaElish.git
 cd EnumaElish
 
 # 生成构建系统
-mkdir build && cd build
-cmake .. -G "Visual Studio 16 2019" -A x64
-
-# 编译项目
-cmake --build . --config Release
+mkdir build-ninja
+cd build-ninja
+cmake .. -G Ninja
+cmake --build .
 ```
 
 ## 运行示例
 ```bash
-cd build/Release
 EnumaElish.exe
 ```
 
