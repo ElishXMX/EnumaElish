@@ -1,0 +1,17 @@
+{
+	"InstallScripts" : 
+	[
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/runtime/shader/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/3rdparty/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/3rdparty/glfw/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/3rdparty/glfw/src/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/3rdparty/glm/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/3rdparty/glm/glm/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/3rdparty/spdlog/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/3rdparty/tinyobjloader/cmake_install.cmake",
+		"D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/engine/runtime/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

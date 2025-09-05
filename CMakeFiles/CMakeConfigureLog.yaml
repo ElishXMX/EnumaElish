@@ -1,0 +1,762 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineSystem.cmake:205 (message)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      The system is: Windows - 10.0.26100 - AMD64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCCompiler.cmake:123 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      Compiling the C compiler identification source file "CMakeCCompilerId.c" succeeded.
+      Compiler: D:/Apps/ScoopApp/apps/gcc/current/bin/gcc.exe 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "a.exe"
+      
+      The C compiler identification is GNU, found in:
+        D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/4.0.3/CompilerIdC/a.exe
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: D:/Apps/ScoopApp/apps/gcc/current/bin/g++.exe 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.exe"
+      
+      The CXX compiler identification is GNU, found in:
+        D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/4.0.3/CompilerIdCXX/a.exe
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerABI.cmake:83 (try_compile)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:5 (project)"
+    checks:
+      - "Detecting C compiler ABI info"
+    directories:
+      source: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-x7j6eb"
+      binary: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-x7j6eb"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_C_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-x7j6eb'
+        
+        Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_7cca6
+        [1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe   -v -o CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj -c D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeCCompilerABI.c
+        Using built-in specs.
+        COLLECT_GCC=D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe
+        Target: x86_64-w64-mingw32
+        Configured with: ../src/configure --enable-languages=c,c++ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-multilib --prefix=/e/temp/gcc/dest --with-sysroot=/e/temp/gcc/dest --disable-libstdcxx-pch --disable-libstdcxx-verbose --disable-nls --disable-shared --disable-win32-registry --enable-threads=posix --enable-libgomp --with-zstd=/c/mingw
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.2.0 (GCC) 
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_7cca6.dir/'
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/cc1.exe -quiet -v -iprefix D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/ -D_REENTRANT D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_7cca6.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mtune=generic -march=x86-64 -version -o C:\\Users\\admin\\AppData\\Local\\Temp\\ccm21M2O.s
+        GNU C17 (GCC) version 13.2.0 (x86_64-w64-mingw32)
+        	compiled by GNU C version 13.2.0, GMP version 6.3.0, MPFR version 4.2.1, MPC version 1.3.1, isl version isl-0.24-GMP
+        
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/include"
+        ignoring nonexistent directory "/e/temp/gcc/dest/e/temp/gcc/dest/lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include"
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed"
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include"
+        ignoring nonexistent directory "/e/temp/gcc/dest/mingw/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         D:\\Apps\\ScoopApp\\apps\\gcc\\current\\include
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include
+        End of search list.
+        Compiler executable checksum: 57be99a5b99999b94eef0e4814eb03c2
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_7cca6.dir/'
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj C:\\Users\\admin\\AppData\\Local\\Temp\\ccm21M2O.s
+        GNU assembler version 2.41 (x86_64-w64-mingw32) using BFD version (GNU Binutils) 2.41
+        COMPILER_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/
+        LIBRARY_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.'
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe  -v -Wl,-v CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj -o cmTC_7cca6.exe -Wl,--out-implib,libcmTC_7cca6.dll.a -Wl,--major-image-version,0,--minor-image-version,0   && cd ."
+        Using built-in specs.
+        COLLECT_GCC=D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe
+        COLLECT_LTO_WRAPPER=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe
+        Target: x86_64-w64-mingw32
+        Configured with: ../src/configure --enable-languages=c,c++ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-multilib --prefix=/e/temp/gcc/dest --with-sysroot=/e/temp/gcc/dest --disable-libstdcxx-pch --disable-libstdcxx-verbose --disable-nls --disable-shared --disable-win32-registry --enable-threads=posix --enable-libgomp --with-zstd=/c/mingw
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.2.0 (GCC) 
+        COMPILER_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/
+        LIBRARY_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_7cca6.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_7cca6.'
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/collect2.exe -plugin D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll -plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\cc8a7RTQ.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 --sysroot=/e/temp/gcc/dest -m i386pep -Bdynamic -o cmTC_7cca6.exe D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0 -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../.. -v CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj --out-implib libcmTC_7cca6.dll.a --major-image-version 0 --minor-image-version 0 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o
+        collect2 version 13.2.0
+        D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe -plugin D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll -plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\cc8a7RTQ.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 --sysroot=/e/temp/gcc/dest -m i386pep -Bdynamic -o cmTC_7cca6.exe D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0 -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../.. -v CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj --out-implib libcmTC_7cca6.dll.a --major-image-version 0 --minor-image-version 0 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o
+        GNU ld (GNU Binutils) 2.41
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_7cca6.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_7cca6.'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerABI.cmake:191 (message)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      Parsed C implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [D:/Apps/ScoopApp/apps/gcc/current/include]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include]
+        end of search list found
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/current/include] ==> [D:/Apps/ScoopApp/apps/gcc/current/include]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/include]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/include]
+        implicit include dirs: [D:/Apps/ScoopApp/apps/gcc/current/include;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/include;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed;D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerABI.cmake:227 (message)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      Parsed C implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)))("|,| |$)]
+        ignore line: [Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-x7j6eb']
+        ignore line: []
+        ignore line: [Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_7cca6]
+        ignore line: [[1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe   -v -o CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj -c D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeCCompilerABI.c]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe]
+        ignore line: [Target: x86_64-w64-mingw32]
+        ignore line: [Configured with: ../src/configure --enable-languages=c c++ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-multilib --prefix=/e/temp/gcc/dest --with-sysroot=/e/temp/gcc/dest --disable-libstdcxx-pch --disable-libstdcxx-verbose --disable-nls --disable-shared --disable-win32-registry --enable-threads=posix --enable-libgomp --with-zstd=/c/mingw]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.2.0 (GCC) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_7cca6.dir/']
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/cc1.exe -quiet -v -iprefix D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/ -D_REENTRANT D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_7cca6.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mtune=generic -march=x86-64 -version -o C:\\Users\\admin\\AppData\\Local\\Temp\\ccm21M2O.s]
+        ignore line: [GNU C17 (GCC) version 13.2.0 (x86_64-w64-mingw32)]
+        ignore line: [	compiled by GNU C version 13.2.0  GMP version 6.3.0  MPFR version 4.2.1  MPC version 1.3.1  isl version isl-0.24-GMP]
+        ignore line: []
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/include"]
+        ignore line: [ignoring nonexistent directory "/e/temp/gcc/dest/e/temp/gcc/dest/lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include"]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed"]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include"]
+        ignore line: [ignoring nonexistent directory "/e/temp/gcc/dest/mingw/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ D:\\Apps\\ScoopApp\\apps\\gcc\\current\\include]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include]
+        ignore line: [End of search list.]
+        ignore line: [Compiler executable checksum: 57be99a5b99999b94eef0e4814eb03c2]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_7cca6.dir/']
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj C:\\Users\\admin\\AppData\\Local\\Temp\\ccm21M2O.s]
+        ignore line: [GNU assembler version 2.41 (x86_64-w64-mingw32) using BFD version (GNU Binutils) 2.41]
+        ignore line: [COMPILER_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/]
+        ignore line: [LIBRARY_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.']
+        ignore line: [[2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe  -v -Wl -v CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj -o cmTC_7cca6.exe -Wl --out-implib libcmTC_7cca6.dll.a -Wl --major-image-version 0 --minor-image-version 0   && cd ."]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe]
+        ignore line: [COLLECT_LTO_WRAPPER=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe]
+        ignore line: [Target: x86_64-w64-mingw32]
+        ignore line: [Configured with: ../src/configure --enable-languages=c c++ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-multilib --prefix=/e/temp/gcc/dest --with-sysroot=/e/temp/gcc/dest --disable-libstdcxx-pch --disable-libstdcxx-verbose --disable-nls --disable-shared --disable-win32-registry --enable-threads=posix --enable-libgomp --with-zstd=/c/mingw]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.2.0 (GCC) ]
+        ignore line: [COMPILER_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/]
+        ignore line: [LIBRARY_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_7cca6.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_7cca6.']
+        link line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/collect2.exe -plugin D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll -plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\cc8a7RTQ.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 --sysroot=/e/temp/gcc/dest -m i386pep -Bdynamic -o cmTC_7cca6.exe D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0 -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../.. -v CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj --out-implib libcmTC_7cca6.dll.a --major-image-version 0 --minor-image-version 0 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/collect2.exe] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll] ==> ignore
+          arg [-plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe] ==> ignore
+          arg [-plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\cc8a7RTQ.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmoldname] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+          arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lpthread] ==> ignore
+          arg [-plugin-opt=-pass-through=-ladvapi32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lshell32] ==> ignore
+          arg [-plugin-opt=-pass-through=-luser32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmoldname] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+          arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+          arg [--sysroot=/e/temp/gcc/dest] ==> ignore
+          arg [-m] ==> ignore
+          arg [i386pep] ==> ignore
+          arg [-Bdynamic] ==> search dynamic
+          arg [-o] ==> ignore
+          arg [cmTC_7cca6.exe] ==> ignore
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o] ==> obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o]
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o] ==> obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../..] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../..]
+          arg [-v] ==> ignore
+          arg [CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj] ==> ignore
+          arg [--out-implib] ==> ignore
+          arg [libcmTC_7cca6.dll.a] ==> ignore
+          arg [--major-image-version] ==> ignore
+          arg [0] ==> ignore
+          arg [--minor-image-version] ==> ignore
+          arg [0] ==> ignore
+          arg [-lmingw32] ==> lib [mingw32]
+          arg [-lgcc] ==> lib [gcc]
+          arg [-lmoldname] ==> lib [moldname]
+          arg [-lmingwex] ==> lib [mingwex]
+          arg [-lmsvcrt] ==> lib [msvcrt]
+          arg [-lkernel32] ==> lib [kernel32]
+          arg [-lpthread] ==> lib [pthread]
+          arg [-ladvapi32] ==> lib [advapi32]
+          arg [-lshell32] ==> lib [shell32]
+          arg [-luser32] ==> lib [user32]
+          arg [-lkernel32] ==> lib [kernel32]
+          arg [-lmingw32] ==> lib [mingw32]
+          arg [-lgcc] ==> lib [gcc]
+          arg [-lmoldname] ==> lib [moldname]
+          arg [-lmingwex] ==> lib [mingwex]
+          arg [-lmsvcrt] ==> lib [msvcrt]
+          arg [-lkernel32] ==> lib [kernel32]
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o] ==> obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+        ignore line: [collect2 version 13.2.0]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe -plugin D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll -plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\cc8a7RTQ.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 --sysroot=/e/temp/gcc/dest -m i386pep -Bdynamic -o cmTC_7cca6.exe D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0 -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../.. -v CMakeFiles/cmTC_7cca6.dir/CMakeCCompilerABI.c.obj --out-implib libcmTC_7cca6.dll.a --major-image-version 0 --minor-image-version 0 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+        linker tool for 'C': D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/bin/ld.exe
+        remove lib [msvcrt]
+        remove lib [msvcrt]
+        collapse obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib/crt2.o]
+        collapse obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o]
+        collapse obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../..] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib]
+        implicit libs: [mingw32;gcc;moldname;mingwex;kernel32;pthread;advapi32;shell32;user32;kernel32;mingw32;gcc;moldname;mingwex;kernel32]
+        implicit objs: [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib/crt2.o;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+        implicit dirs: [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc;D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CMakeDetermineLinkerId.cmake:36 (message)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerABI.cmake:270 (cmake_determine_linker_id)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeTestCCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      Running the C compiler's linker: "D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/bin/ld.exe" "-v"
+      GNU ld (GNU Binutils) 2.41
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerABI.cmake:83 (try_compile)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:5 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j9sog7"
+      binary: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j9sog7"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j9sog7'
+        
+        Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_fd894
+        [1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\g++.exe   -v -o CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj -c D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeCXXCompilerABI.cpp
+        Using built-in specs.
+        COLLECT_GCC=D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\g++.exe
+        Target: x86_64-w64-mingw32
+        Configured with: ../src/configure --enable-languages=c,c++ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-multilib --prefix=/e/temp/gcc/dest --with-sysroot=/e/temp/gcc/dest --disable-libstdcxx-pch --disable-libstdcxx-verbose --disable-nls --disable-shared --disable-win32-registry --enable-threads=posix --enable-libgomp --with-zstd=/c/mingw
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.2.0 (GCC) 
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_fd894.dir/'
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/cc1plus.exe -quiet -v -iprefix D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/ -D_REENTRANT D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_fd894.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mtune=generic -march=x86-64 -version -o C:\\Users\\admin\\AppData\\Local\\Temp\\ccWS8Id7.s
+        GNU C++17 (GCC) version 13.2.0 (x86_64-w64-mingw32)
+        	compiled by GNU C version 13.2.0, GMP version 6.3.0, MPFR version 4.2.1, MPC version 1.3.1, isl version isl-0.24-GMP
+        
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0"
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/x86_64-w64-mingw32"
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/backward"
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/include"
+        ignoring nonexistent directory "/e/temp/gcc/dest/e/temp/gcc/dest/lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include"
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed"
+        ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include"
+        ignoring nonexistent directory "/e/temp/gcc/dest/mingw/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         D:\\Apps\\ScoopApp\\apps\\gcc\\current\\include
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/x86_64-w64-mingw32
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/backward
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include
+        End of search list.
+        Compiler executable checksum: aa8d155dea9d0b877613f1961dc4601a
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_fd894.dir/'
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj C:\\Users\\admin\\AppData\\Local\\Temp\\ccWS8Id7.s
+        GNU assembler version 2.41 (x86_64-w64-mingw32) using BFD version (GNU Binutils) 2.41
+        COMPILER_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/
+        LIBRARY_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.'
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\g++.exe  -v -Wl,-v CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj -o cmTC_fd894.exe -Wl,--out-implib,libcmTC_fd894.dll.a -Wl,--major-image-version,0,--minor-image-version,0   && cd ."
+        Using built-in specs.
+        COLLECT_GCC=D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\g++.exe
+        COLLECT_LTO_WRAPPER=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe
+        Target: x86_64-w64-mingw32
+        Configured with: ../src/configure --enable-languages=c,c++ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-multilib --prefix=/e/temp/gcc/dest --with-sysroot=/e/temp/gcc/dest --disable-libstdcxx-pch --disable-libstdcxx-verbose --disable-nls --disable-shared --disable-win32-registry --enable-threads=posix --enable-libgomp --with-zstd=/c/mingw
+        Thread model: posix
+        Supported LTO compression algorithms: zlib zstd
+        gcc version 13.2.0 (GCC) 
+        COMPILER_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/
+        LIBRARY_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/;D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_fd894.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_fd894.'
+         D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/collect2.exe -plugin D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll -plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\ccov23Id.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 --sysroot=/e/temp/gcc/dest -m i386pep -Bdynamic -o cmTC_fd894.exe D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0 -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../.. -v CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj --out-implib libcmTC_fd894.dll.a --major-image-version 0 --minor-image-version 0 -lstdc++ -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o
+        collect2 version 13.2.0
+        D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe -plugin D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll -plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\ccov23Id.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 --sysroot=/e/temp/gcc/dest -m i386pep -Bdynamic -o cmTC_fd894.exe D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0 -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../.. -v CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj --out-implib libcmTC_fd894.dll.a --major-image-version 0 --minor-image-version 0 -lstdc++ -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o
+        GNU ld (GNU Binutils) 2.41
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_fd894.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_fd894.'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerABI.cmake:191 (message)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [D:/Apps/ScoopApp/apps/gcc/current/include]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/x86_64-w64-mingw32]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/backward]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed]
+          add: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include]
+        end of search list found
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/current/include] ==> [D:/Apps/ScoopApp/apps/gcc/current/include]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/include/c++/13.2.0]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/x86_64-w64-mingw32] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/include/c++/13.2.0/x86_64-w64-mingw32]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/backward] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/include/c++/13.2.0/backward]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/include]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed]
+        collapse include dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/include]
+        implicit include dirs: [D:/Apps/ScoopApp/apps/gcc/current/include;D:/Apps/ScoopApp/apps/gcc/13.2.0/include/c++/13.2.0;D:/Apps/ScoopApp/apps/gcc/13.2.0/include/c++/13.2.0/x86_64-w64-mingw32;D:/Apps/ScoopApp/apps/gcc/13.2.0/include/c++/13.2.0/backward;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/include;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed;D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerABI.cmake:227 (message)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        linker tool regex: [^[ 	]*(->|")?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)))("|,| |$)]
+        ignore line: [Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-j9sog7']
+        ignore line: []
+        ignore line: [Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_fd894]
+        ignore line: [[1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\g++.exe   -v -o CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj -c D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\g++.exe]
+        ignore line: [Target: x86_64-w64-mingw32]
+        ignore line: [Configured with: ../src/configure --enable-languages=c c++ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-multilib --prefix=/e/temp/gcc/dest --with-sysroot=/e/temp/gcc/dest --disable-libstdcxx-pch --disable-libstdcxx-verbose --disable-nls --disable-shared --disable-win32-registry --enable-threads=posix --enable-libgomp --with-zstd=/c/mingw]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.2.0 (GCC) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_fd894.dir/']
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/cc1plus.exe -quiet -v -iprefix D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/ -D_REENTRANT D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_fd894.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mtune=generic -march=x86-64 -version -o C:\\Users\\admin\\AppData\\Local\\Temp\\ccWS8Id7.s]
+        ignore line: [GNU C++17 (GCC) version 13.2.0 (x86_64-w64-mingw32)]
+        ignore line: [	compiled by GNU C version 13.2.0  GMP version 6.3.0  MPFR version 4.2.1  MPC version 1.3.1  isl version isl-0.24-GMP]
+        ignore line: []
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0"]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/x86_64-w64-mingw32"]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/backward"]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/include"]
+        ignore line: [ignoring nonexistent directory "/e/temp/gcc/dest/e/temp/gcc/dest/lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include"]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed"]
+        ignore line: [ignoring duplicate directory "D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/../../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include"]
+        ignore line: [ignoring nonexistent directory "/e/temp/gcc/dest/mingw/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ D:\\Apps\\ScoopApp\\apps\\gcc\\current\\include]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/x86_64-w64-mingw32]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../include/c++/13.2.0/backward]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/include-fixed]
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/include]
+        ignore line: [End of search list.]
+        ignore line: [Compiler executable checksum: aa8d155dea9d0b877613f1961dc4601a]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_fd894.dir/']
+        ignore line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/as.exe -v -o CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj C:\\Users\\admin\\AppData\\Local\\Temp\\ccWS8Id7.s]
+        ignore line: [GNU assembler version 2.41 (x86_64-w64-mingw32) using BFD version (GNU Binutils) 2.41]
+        ignore line: [COMPILER_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/]
+        ignore line: [LIBRARY_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj' '-c' '-mtune=generic' '-march=x86-64' '-dumpdir' 'CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.']
+        ignore line: [[2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\g++.exe  -v -Wl -v CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj -o cmTC_fd894.exe -Wl --out-implib libcmTC_fd894.dll.a -Wl --major-image-version 0 --minor-image-version 0   && cd ."]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\g++.exe]
+        ignore line: [COLLECT_LTO_WRAPPER=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe]
+        ignore line: [Target: x86_64-w64-mingw32]
+        ignore line: [Configured with: ../src/configure --enable-languages=c c++ --build=x86_64-w64-mingw32 --host=x86_64-w64-mingw32 --target=x86_64-w64-mingw32 --disable-multilib --prefix=/e/temp/gcc/dest --with-sysroot=/e/temp/gcc/dest --disable-libstdcxx-pch --disable-libstdcxx-verbose --disable-nls --disable-shared --disable-win32-registry --enable-threads=posix --enable-libgomp --with-zstd=/c/mingw]
+        ignore line: [Thread model: posix]
+        ignore line: [Supported LTO compression algorithms: zlib zstd]
+        ignore line: [gcc version 13.2.0 (GCC) ]
+        ignore line: [COMPILER_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/]
+        ignore line: [LIBRARY_PATH=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_fd894.exe' '-mtune=generic' '-march=x86-64' '-dumpdir' 'cmTC_fd894.']
+        link line: [ D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/collect2.exe -plugin D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll -plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\ccov23Id.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 --sysroot=/e/temp/gcc/dest -m i386pep -Bdynamic -o cmTC_fd894.exe D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0 -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../.. -v CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj --out-implib libcmTC_fd894.dll.a --major-image-version 0 --minor-image-version 0 -lstdc++ -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/collect2.exe] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll] ==> ignore
+          arg [-plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe] ==> ignore
+          arg [-plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\ccov23Id.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmoldname] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+          arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lpthread] ==> ignore
+          arg [-plugin-opt=-pass-through=-ladvapi32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lshell32] ==> ignore
+          arg [-plugin-opt=-pass-through=-luser32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmingw32] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmoldname] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmingwex] ==> ignore
+          arg [-plugin-opt=-pass-through=-lmsvcrt] ==> ignore
+          arg [-plugin-opt=-pass-through=-lkernel32] ==> ignore
+          arg [--sysroot=/e/temp/gcc/dest] ==> ignore
+          arg [-m] ==> ignore
+          arg [i386pep] ==> ignore
+          arg [-Bdynamic] ==> search dynamic
+          arg [-o] ==> ignore
+          arg [cmTC_fd894.exe] ==> ignore
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o] ==> obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o]
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o] ==> obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib]
+          arg [-LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../..] ==> dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../..]
+          arg [-v] ==> ignore
+          arg [CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj] ==> ignore
+          arg [--out-implib] ==> ignore
+          arg [libcmTC_fd894.dll.a] ==> ignore
+          arg [--major-image-version] ==> ignore
+          arg [0] ==> ignore
+          arg [--minor-image-version] ==> ignore
+          arg [0] ==> ignore
+          arg [-lstdc++] ==> lib [stdc++]
+          arg [-lmingw32] ==> lib [mingw32]
+          arg [-lgcc] ==> lib [gcc]
+          arg [-lmoldname] ==> lib [moldname]
+          arg [-lmingwex] ==> lib [mingwex]
+          arg [-lmsvcrt] ==> lib [msvcrt]
+          arg [-lkernel32] ==> lib [kernel32]
+          arg [-lpthread] ==> lib [pthread]
+          arg [-ladvapi32] ==> lib [advapi32]
+          arg [-lshell32] ==> lib [shell32]
+          arg [-luser32] ==> lib [user32]
+          arg [-lkernel32] ==> lib [kernel32]
+          arg [-lmingw32] ==> lib [mingw32]
+          arg [-lgcc] ==> lib [gcc]
+          arg [-lmoldname] ==> lib [moldname]
+          arg [-lmingwex] ==> lib [mingwex]
+          arg [-lmsvcrt] ==> lib [msvcrt]
+          arg [-lkernel32] ==> lib [kernel32]
+          arg [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o] ==> obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+        ignore line: [collect2 version 13.2.0]
+        ignore line: [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/bin/ld.exe -plugin D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/liblto_plugin.dll -plugin-opt=D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../libexec/gcc/x86_64-w64-mingw32/13.2.0/lto-wrapper.exe -plugin-opt=-fresolution=C:\\Users\\admin\\AppData\\Local\\Temp\\ccov23Id.res -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lpthread -plugin-opt=-pass-through=-ladvapi32 -plugin-opt=-pass-through=-lshell32 -plugin-opt=-pass-through=-luser32 -plugin-opt=-pass-through=-lkernel32 -plugin-opt=-pass-through=-lmingw32 -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lmoldname -plugin-opt=-pass-through=-lmingwex -plugin-opt=-pass-through=-lmsvcrt -plugin-opt=-pass-through=-lkernel32 --sysroot=/e/temp/gcc/dest -m i386pep -Bdynamic -o cmTC_fd894.exe D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0 -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib -LD:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../.. -v CMakeFiles/cmTC_fd894.dir/CMakeCXXCompilerABI.cpp.obj --out-implib libcmTC_fd894.dll.a --major-image-version 0 --minor-image-version 0 -lstdc++ -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 -lpthread -ladvapi32 -lshell32 -luser32 -lkernel32 -lmingw32 -lgcc -lmoldname -lmingwex -lmsvcrt -lkernel32 D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+        linker tool for 'CXX': D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/bin/ld.exe
+        remove lib [msvcrt]
+        remove lib [msvcrt]
+        collapse obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib/crt2.o] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib/crt2.o]
+        collapse obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o]
+        collapse obj [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib/../lib] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../lib] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../../../x86_64-w64-mingw32/lib] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib]
+        collapse library dir [D:/Apps/ScoopApp/apps/gcc/13.2.0/bin/../lib/gcc/x86_64-w64-mingw32/13.2.0/../../..] ==> [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib]
+        implicit libs: [stdc++;mingw32;gcc;moldname;mingwex;kernel32;pthread;advapi32;shell32;user32;kernel32;mingw32;gcc;moldname;mingwex;kernel32]
+        implicit objs: [D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib/crt2.o;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/crtbegin.o;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0/crtend.o]
+        implicit dirs: [D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc/x86_64-w64-mingw32/13.2.0;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib/gcc;D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/lib;D:/Apps/ScoopApp/apps/gcc/13.2.0/lib]
+        implicit fwks: []
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CMakeDetermineLinkerId.cmake:36 (message)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeDetermineCompilerABI.cmake:270 (cmake_determine_linker_id)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:5 (project)"
+    message: |
+      Running the CXX compiler's linker: "D:/Apps/ScoopApp/apps/gcc/13.2.0/x86_64-w64-mingw32/bin/ld.exe" "-v"
+      GNU ld (GNU Binutils) 2.41
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CheckSourceCompiles.cmake:104 (try_compile)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CheckCSourceCompiles.cmake:58 (cmake_check_source_compiles)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/FindThreads.cmake:97 (check_c_source_compiles)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/FindThreads.cmake:163 (_threads_check_libc)"
+      - "engine/3rdparty/glfw/CMakeLists.txt:62 (find_package)"
+    checks:
+      - "Performing Test CMAKE_HAVE_LIBC_PTHREAD"
+    directories:
+      source: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-znwn18"
+      binary: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-znwn18"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "D:/Coding/vulkanRenderer/vulkanRenderer/engine/3rdparty/glfw/CMake/modules"
+    buildResult:
+      variable: "CMAKE_HAVE_LIBC_PTHREAD"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-znwn18'
+        
+        Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_df138
+        [1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe -DCMAKE_HAVE_LIBC_PTHREAD   -o CMakeFiles/cmTC_df138.dir/src.c.obj -c D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-znwn18/src.c
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe   CMakeFiles/cmTC_df138.dir/src.c.obj -o cmTC_df138.exe -Wl,--out-implib,libcmTC_df138.dll.a -Wl,--major-image-version,0,--minor-image-version,0  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd ."
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CheckIncludeFile.cmake:99 (try_compile)"
+      - "engine/3rdparty/glfw/CMakeLists.txt:111 (check_include_file)"
+    checks:
+      - "Looking for dinput.h"
+    directories:
+      source: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-eynqq1"
+      binary: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-eynqq1"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "D:/Coding/vulkanRenderer/vulkanRenderer/engine/3rdparty/glfw/CMake/modules"
+    buildResult:
+      variable: "DINPUT_H_FOUND"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-eynqq1'
+        
+        Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_9b1dc
+        [1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe    -o CMakeFiles/cmTC_9b1dc.dir/CheckIncludeFile.c.obj -c D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-eynqq1/CheckIncludeFile.c
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe   CMakeFiles/cmTC_9b1dc.dir/CheckIncludeFile.c.obj -o cmTC_9b1dc.exe -Wl,--out-implib,libcmTC_9b1dc.dll.a -Wl,--major-image-version,0,--minor-image-version,0  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd ."
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CheckIncludeFile.cmake:99 (try_compile)"
+      - "engine/3rdparty/glfw/CMakeLists.txt:112 (check_include_file)"
+    checks:
+      - "Looking for xinput.h"
+    directories:
+      source: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-jmkaai"
+      binary: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-jmkaai"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "D:/Coding/vulkanRenderer/vulkanRenderer/engine/3rdparty/glfw/CMake/modules"
+    buildResult:
+      variable: "XINPUT_H_FOUND"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-jmkaai'
+        
+        Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_eacd4
+        [1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe    -o CMakeFiles/cmTC_eacd4.dir/CheckIncludeFile.c.obj -c D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-jmkaai/CheckIncludeFile.c
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe   CMakeFiles/cmTC_eacd4.dir/CheckIncludeFile.c.obj -o cmTC_eacd4.exe -Wl,--out-implib,libcmTC_eacd4.dll.a -Wl,--major-image-version,0,--minor-image-version,0  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd ."
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CheckSourceCompiles.cmake:104 (try_compile)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CheckCCompilerFlag.cmake:56 (cmake_check_compiler_flag)"
+      - "engine/3rdparty/glfw/CMakeLists.txt:122 (check_c_compiler_flag)"
+    checks:
+      - "Performing Test _GLFW_HAS_DEP"
+    directories:
+      source: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-0sxs1e"
+      binary: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-0sxs1e"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "D:/Coding/vulkanRenderer/vulkanRenderer/engine/3rdparty/glfw/CMake/modules"
+    buildResult:
+      variable: "_GLFW_HAS_DEP"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-0sxs1e'
+        
+        Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_a3651
+        [1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe -D_GLFW_HAS_DEP  -Wl,--nxcompat -o CMakeFiles/cmTC_a3651.dir/src.c.obj -c D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-0sxs1e/src.c
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe -Wl,--nxcompat  CMakeFiles/cmTC_a3651.dir/src.c.obj -o cmTC_a3651.exe -Wl,--out-implib,libcmTC_a3651.dll.a -Wl,--major-image-version,0,--minor-image-version,0  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd ."
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CheckSourceCompiles.cmake:104 (try_compile)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CheckCCompilerFlag.cmake:56 (cmake_check_compiler_flag)"
+      - "engine/3rdparty/glfw/CMakeLists.txt:129 (check_c_compiler_flag)"
+    checks:
+      - "Performing Test _GLFW_HAS_ASLR"
+    directories:
+      source: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-apj9g1"
+      binary: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-apj9g1"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "D:/Coding/vulkanRenderer/vulkanRenderer/engine/3rdparty/glfw/CMake/modules"
+    buildResult:
+      variable: "_GLFW_HAS_ASLR"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-apj9g1'
+        
+        Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_5d8c1
+        [1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe -D_GLFW_HAS_ASLR  -Wl,--dynamicbase -o CMakeFiles/cmTC_5d8c1.dir/src.c.obj -c D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-apj9g1/src.c
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe -Wl,--dynamicbase  CMakeFiles/cmTC_5d8c1.dir/src.c.obj -o cmTC_5d8c1.exe -Wl,--out-implib,libcmTC_5d8c1.dll.a -Wl,--major-image-version,0,--minor-image-version,0  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd ."
+        
+      exitCode: 0
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CheckSourceCompiles.cmake:104 (try_compile)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/Internal/CheckCompilerFlag.cmake:18 (cmake_check_source_compiles)"
+      - "D:/Apps/ScoopApp/apps/cmake/current/share/cmake-4.0/Modules/CheckCCompilerFlag.cmake:56 (cmake_check_compiler_flag)"
+      - "engine/3rdparty/glfw/CMakeLists.txt:136 (check_c_compiler_flag)"
+    checks:
+      - "Performing Test _GLFW_HAS_64ASLR"
+    directories:
+      source: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-rzu4kh"
+      binary: "D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-rzu4kh"
+    cmakeVariables:
+      CMAKE_C_FLAGS: ""
+      CMAKE_C_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+      CMAKE_MODULE_PATH: "D:/Coding/vulkanRenderer/vulkanRenderer/engine/3rdparty/glfw/CMake/modules"
+    buildResult:
+      variable: "_GLFW_HAS_64ASLR"
+      cached: true
+      stdout: |
+        Change Dir: 'D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-rzu4kh'
+        
+        Run Build Command(s): D:/Apps/ScoopApp/apps/ninja/ninja.exe -v cmTC_0898f
+        [1/2] D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe -D_GLFW_HAS_64ASLR  -Wl,--high-entropy-va -o CMakeFiles/cmTC_0898f.dir/src.c.obj -c D:/Coding/vulkanRenderer/vulkanRenderer/build-ninja/CMakeFiles/CMakeScratch/TryCompile-rzu4kh/src.c
+        [2/2] C:\\WINDOWS\\system32\\cmd.exe /C "cd . && D:\\Apps\\ScoopApp\\apps\\gcc\\current\\bin\\gcc.exe -Wl,--high-entropy-va  CMakeFiles/cmTC_0898f.dir/src.c.obj -o cmTC_0898f.exe -Wl,--out-implib,libcmTC_0898f.dll.a -Wl,--major-image-version,0,--minor-image-version,0  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd ."
+        
+      exitCode: 0
+...
