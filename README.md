@@ -1,5 +1,5 @@
 # EnumaElish 引擎
-![EnumaElish Logo](logo.png)
+![EnumaElish Logo](LOGO.png)
 
 ## 项目概述
 EnumaElish 是一个基于Vulkan的现代3D游戏引擎，采用C++20开发，支持跨平台渲染和实时图形处理。
