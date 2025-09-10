@@ -6,6 +6,8 @@
 #include "../../render/interface/vulkan/vulkan_util.h"
 #include "../../render/render_system.h"
 #include "../render_resource.h"
+#include "../render_pipeline.h"
+#include "ui_pass.h"
 #include "../../global/global_context.h"
 #include "../../input/input_system.h"
 
@@ -32,6 +34,7 @@ namespace Elish
      */
     void MainCameraPass::initialize()
     {
+        // LOG_INFO("[MainCameraPass] Starting initialize");
         // 初始化相机
         m_camera = std::make_shared<RenderCamera>();
         
@@ -191,18 +194,32 @@ namespace Elish
         // 开始渲染通道
         m_rhi->cmdBeginRenderPassPFN(command_buffer, &render_pass_begin_info, RHI_SUBPASS_CONTENTS_INLINE);
 
-
-        float color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-        m_rhi->pushEvent(command_buffer, "PIC RENDER", color);
-        // 设置视口
-       
+        // === 子通道0：主渲染（背景+模型） ===
+        float main_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        m_rhi->pushEvent(command_buffer, "MAIN RENDER SUBPASS", main_color);
+        
+        // 设置视口和裁剪矩形
         m_rhi->cmdSetViewportPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, m_rhi->getSwapchainInfo().viewport);
         m_rhi->cmdSetScissorPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, m_rhi->getSwapchainInfo().scissor);
         
+        // 渲染背景
         drawBackground(command_buffer);
         
-        // Draw loaded models
+        // 渲染模型
         drawModels(command_buffer);
+        
+        m_rhi->popEvent(command_buffer);
+        
+        // === 切换到子通道1：UI渲染 ===
+        m_rhi->cmdNextSubpassPFN(command_buffer, RHI_SUBPASS_CONTENTS_INLINE);
+        
+        float ui_color[4] = { 0.0f, 1.0f, 0.0f, 1.0f };
+        m_rhi->pushEvent(command_buffer, "UI RENDER SUBPASS", ui_color);
+        
+        // 渲染UI内容
+        drawUI(command_buffer);
+        
+        m_rhi->popEvent(command_buffer);
         
         // 结束渲染通道
         m_rhi->cmdEndRenderPassPFN(command_buffer);
@@ -223,15 +240,20 @@ namespace Elish
         // 直接绘制方式不需要绑定顶点缓冲区和索引缓冲区
         
         // 绑定背景渲染的描述符集
-            m_rhi->cmdBindDescriptorSetsPFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, 
-                                          m_render_pipelines[0].pipelineLayout, 0, 1, & m_descriptor_infos[m_rhi->getCurrentFrameIndex()].descriptor_set, 0, nullptr);
+        uint32_t currentFrame = m_rhi->getCurrentFrameIndex();
+        
+        
+        
+        
+        m_rhi->cmdBindDescriptorSetsPFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, 
+                                      m_render_pipelines[0].pipelineLayout, 0, 1, &m_descriptor_infos[currentFrame].descriptor_set, 0, nullptr);
+        
+        
     
         
         
         // 执行直接绘制命令（绘制6个顶点组成的两个三角形）
         m_rhi->cmdDraw(command_buffer, 6, 1, 0, 0);
-
-         m_rhi->popEvent(m_rhi->getCurrentCommandBuffer());
     }
     // 设置渲染附件的方法
     void MainCameraPass::setupAttachments()
@@ -247,11 +269,17 @@ namespace Elish
 
     }
     // 设置渲染通道的方法
+    /**
+     * @brief 设置主相机渲染通道，包含两个子通道：主渲染子通道和UI子通道
+     * 子通道0：主渲染（背景+模型）
+     * 子通道1：UI渲染（ImGui界面）
+     */
     void MainCameraPass::setupRenderPass()
     {
-        // 记录日志信息，表示开始设置渲染通道
+        
 
-        RHIAttachmentDescription attachments[2] = {};//颜色附件和深度附件
+        // 定义附件：颜色附件和深度附件
+        RHIAttachmentDescription attachments[2] = {};
 
         // 配置颜色附件 - 使用交换链图像格式
         attachments[0].format = m_rhi->getSwapchainInfo().image_format;
@@ -273,48 +301,77 @@ namespace Elish
         attachments[1].initialLayout = RHI_IMAGE_LAYOUT_UNDEFINED;
         attachments[1].finalLayout = RHI_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-		RHIAttachmentReference colorAttachmentRef{};
-		colorAttachmentRef.attachment = 0;
-		colorAttachmentRef.layout = RHI_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        // 定义附件引用
+        RHIAttachmentReference colorAttachmentRef{};
+        colorAttachmentRef.attachment = 0;
+        colorAttachmentRef.layout = RHI_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-		RHIAttachmentReference depthAttachmentRef{};
-		depthAttachmentRef.attachment = 1;
-		depthAttachmentRef.layout = RHI_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        RHIAttachmentReference depthAttachmentRef{};
+        depthAttachmentRef.attachment = 1;
+        depthAttachmentRef.layout = RHI_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-		/** 渲染子通道 SubPass
-		 * SubPass是RenderPass的下属任务，和RenderPass共享Framebuffer等渲染资源
-		 * 某些渲染操作，比如后处理的Blooming，当前渲染需要依赖上一个渲染结果，但是渲染资源不变，这是SubPass可以优化性能
-		*/
-		RHISubpassDescription subpass{};
-		subpass.pipelineBindPoint = RHI_PIPELINE_BIND_POINT_GRAPHICS;
-		subpass.colorAttachmentCount = 1;
-		subpass.pColorAttachments = &colorAttachmentRef;
-		subpass.pDepthStencilAttachment = &depthAttachmentRef;
+        // === 子通道定义 ===
+        RHISubpassDescription subpasses[2] = {};
+        
+        // 子通道0：主渲染通道（背景+模型）
+        subpasses[0].pipelineBindPoint = RHI_PIPELINE_BIND_POINT_GRAPHICS;
+        subpasses[0].colorAttachmentCount = 1;
+        subpasses[0].pColorAttachments = &colorAttachmentRef;
+        subpasses[0].pDepthStencilAttachment = &depthAttachmentRef;
+        subpasses[0].inputAttachmentCount = 0;
+        subpasses[0].pInputAttachments = nullptr;
+        subpasses[0].pResolveAttachments = nullptr;
+        subpasses[0].preserveAttachmentCount = 0;
+        subpasses[0].pPreserveAttachments = nullptr;
+        
+        // 子通道1：UI渲染通道（ImGui）
+        subpasses[1].pipelineBindPoint = RHI_PIPELINE_BIND_POINT_GRAPHICS;
+        subpasses[1].colorAttachmentCount = 1;
+        subpasses[1].pColorAttachments = &colorAttachmentRef;
+        subpasses[1].pDepthStencilAttachment = nullptr; // UI不需要深度测试
+        subpasses[1].inputAttachmentCount = 0;
+        subpasses[1].pInputAttachments = nullptr;
+        subpasses[1].pResolveAttachments = nullptr;
+        subpasses[1].preserveAttachmentCount = 0;
+        subpasses[1].pPreserveAttachments = nullptr;
 
-		RHISubpassDependency dependency{};
-		dependency.srcSubpass = RHI_SUBPASS_EXTERNAL;
-		dependency.dstSubpass = 0;
-		dependency.srcStageMask = RHI_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | RHI_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-		dependency.srcAccessMask = 0;
-		dependency.dstStageMask = RHI_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | RHI_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-		dependency.dstAccessMask = RHI_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | RHI_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        // === 子通道依赖关系定义 ===
+        RHISubpassDependency dependencies[2] = {};
+        
+        // 依赖0：外部到子通道0（主渲染）
+        dependencies[0].srcSubpass = RHI_SUBPASS_EXTERNAL;
+        dependencies[0].dstSubpass = 0;
+        dependencies[0].srcStageMask = RHI_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | RHI_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependencies[0].srcAccessMask = 0;
+        dependencies[0].dstStageMask = RHI_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | RHI_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+        dependencies[0].dstAccessMask = RHI_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | RHI_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        dependencies[0].dependencyFlags = 0;
+        
+        // 依赖1：子通道0到子通道1（主渲染到UI渲染）
+        dependencies[1].srcSubpass = 0;
+        dependencies[1].dstSubpass = 1;
+        dependencies[1].srcStageMask = RHI_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependencies[1].srcAccessMask = RHI_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependencies[1].dstStageMask = RHI_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+        dependencies[1].dstAccessMask = RHI_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        dependencies[1].dependencyFlags = RHI_DEPENDENCY_BY_REGION_BIT;
 
-		/** 这里将渲染三角形的操作，简化成一个SubPass提交*/
-		RHIRenderPassCreateInfo renderpass_create_info{};
-		renderpass_create_info.sType = RHI_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		renderpass_create_info.attachmentCount = (sizeof(attachments) / sizeof(attachments[0]));
-		renderpass_create_info.pAttachments = attachments;
-		renderpass_create_info.subpassCount = 1;
-		renderpass_create_info.pSubpasses = &subpass;
-		renderpass_create_info.dependencyCount = 1;
-		renderpass_create_info.pDependencies = &dependency;
+        // === 创建渲染通道 ===
+        RHIRenderPassCreateInfo renderpass_create_info{};
+        renderpass_create_info.sType = RHI_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderpass_create_info.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
+        renderpass_create_info.pAttachments = attachments;
+        renderpass_create_info.subpassCount = sizeof(subpasses) / sizeof(subpasses[0]);
+        renderpass_create_info.pSubpasses = subpasses;
+        renderpass_create_info.dependencyCount = sizeof(dependencies) / sizeof(dependencies[0]);
+        renderpass_create_info.pDependencies = dependencies;
 
-		if (m_rhi->createRenderPass(&renderpass_create_info, m_framebuffer.render_pass) != RHI_SUCCESS)
+        if (m_rhi->createRenderPass(&renderpass_create_info, m_framebuffer.render_pass) != RHI_SUCCESS)
         {
-            throw std::runtime_error("failed to create render pass");
+            throw std::runtime_error("[MainCameraPass] Failed to create render pass with subpasses");
         }
 
-
+        
     }
     // 设置描述符集布局的方法
     /**
@@ -353,15 +410,17 @@ namespace Elish
         bg_layoutInfo.bindingCount = sizeof(background_bindings) / sizeof(background_bindings[0]);
         bg_layoutInfo.pBindings = background_bindings;
 
-        // === 创建模型渲染的描述符集布局在RenderResource进行 ===
-        // 为每个帧创建背景
+        // === 修复：所有帧共享同一个描述符集布局 ===
+        // 只创建一个描述符集布局，所有帧共享
+        RHIDescriptorSetLayout* sharedLayout;
+        if (m_rhi->createDescriptorSetLayout(&bg_layoutInfo, sharedLayout) != RHI_SUCCESS)
+        {
+            throw std::runtime_error("create background descriptor set layout");
+        }
+        
+        // 所有帧使用相同的布局
         for (uint32_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++) {
-            // 创建背景描述符集布局
-            if (m_rhi->createDescriptorSetLayout(&bg_layoutInfo, m_descriptor_infos[frameIndex].layout) != RHI_SUCCESS)
-            {
-                throw std::runtime_error("create background descriptor set layout");
-            }
-          
+            m_descriptor_infos[frameIndex].layout = sharedLayout;
         }
 
         
@@ -380,6 +439,9 @@ namespace Elish
         m_render_pipelines.resize(2);  // Resize to accommodate both background and model pipelines  
 
                 
+        
+        
+        
         RHIDescriptorSetLayout*      descriptorset_layouts[1] = {m_descriptor_infos[0].layout};
 
         RHIPipelineLayoutCreateInfo pipeline_layout_create_info {};
@@ -391,6 +453,8 @@ namespace Elish
         {
             throw std::runtime_error("create mesh lighting pipeline layout");
         }
+        
+        
         //shader创建和顶点缓冲区绑定
         RHIShader* vert_shader_module = m_rhi->createShaderModule(PIC_VERT);
         RHIShader* frag_shader_module = m_rhi->createShaderModule(PIC_FRAG);
@@ -533,11 +597,16 @@ namespace Elish
             mesh_global_descriptor_set_alloc_info.descriptorSetCount = 1;
             mesh_global_descriptor_set_alloc_info.pSetLayouts        = &m_descriptor_infos[frameIndex].layout;
 
+            
+            
+            
             if (RHI_SUCCESS != m_rhi->allocateDescriptorSets(&mesh_global_descriptor_set_alloc_info, m_descriptor_infos[frameIndex].descriptor_set))
             {
                 LOG_ERROR("Failed to allocate descriptor set for frame " + std::to_string(frameIndex));
                 throw std::runtime_error("allocate mesh global descriptor set");
             }
+            
+            
 
             RHIDescriptorBufferInfo mesh_perframe_storage_buffer_info{};
             mesh_perframe_storage_buffer_info.buffer = uniformBuffers[frameIndex];
@@ -601,7 +670,7 @@ namespace Elish
             RHIDescriptorBufferInfo mesh_perframe_storage_buffer_info_view = {};
             mesh_perframe_storage_buffer_info_view.offset = 0;
             mesh_perframe_storage_buffer_info_view.range  = sizeof(UniformBufferObjectView);
-            mesh_perframe_storage_buffer_info_view.buffer = uniformBuffers[frameIndex];
+            mesh_perframe_storage_buffer_info_view.buffer = viewUniformBuffers[frameIndex];
             
             
             // Setup texture bindings dynamically for each render object
@@ -764,9 +833,11 @@ namespace Elish
         
         // Use stored render objects instead of repeatedly accessing render resource
         if (m_loaded_render_objects.empty()) {
-            
+            LOG_WARN("[MainCameraPass::drawModels] No loaded render objects available for rendering");
             return;
         }
+        
+        // LOG_INFO("[MainCameraPass::drawModels] Starting to render {} models", m_loaded_render_objects.size());
         
         // Check if model pipeline is available
         if (m_render_pipelines.size() < 2 || !m_render_pipelines[1].graphicsPipeline) {
@@ -780,38 +851,73 @@ namespace Elish
         m_rhi->cmdBindPipelinePFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, m_render_pipelines[1].graphicsPipeline);
 
         
+        // 获取当前时间用于动画计算
+        float currentTime = static_cast<float>(glfwGetTime());
+        
         // Render each loaded model using stored data
         for (size_t i = 0; i < m_loaded_render_objects.size(); ++i) {
             const auto& renderObject = m_loaded_render_objects[i];
             
+            // 计算每个模型的独立变换矩阵
+            glm::mat4 modelMatrix = glm::mat4(1.0f);
+            
+            // 应用位置变换
+            modelMatrix = glm::translate(modelMatrix, renderObject.animationParams.position);
+            
+            // 应用旋转变换（平台模型保持静止）
+            if (renderObject.animationParams.enableAnimation && !renderObject.animationParams.isPlatform) {
+                // 非平台模型的动画旋转
+                float rotationAngle = currentTime * renderObject.animationParams.rotationSpeed;
+                modelMatrix = glm::rotate(modelMatrix, rotationAngle, renderObject.animationParams.rotationAxis);
+            }
+            // 应用静态旋转
+            modelMatrix = glm::rotate(modelMatrix, renderObject.animationParams.rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+            modelMatrix = glm::rotate(modelMatrix, renderObject.animationParams.rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+            modelMatrix = glm::rotate(modelMatrix, renderObject.animationParams.rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+            
+            // 应用缩放变换
+            modelMatrix = glm::scale(modelMatrix, renderObject.animationParams.scale);
+            
+            // 通过Push Constants传递model矩阵到着色器
+            // LOG_DEBUG("[MainCameraPass::drawModels] About to call cmdPushConstantsPFN for model {}", i);
+            m_rhi->cmdPushConstantsPFN(command_buffer, m_render_pipelines[1].pipelineLayout, 
+                                     RHI_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
+            // LOG_DEBUG("[MainCameraPass::drawModels] cmdPushConstantsPFN completed for model {}", i);
+            
             // Bind vertex buffer
+            // LOG_DEBUG("[MainCameraPass::drawModels] About to bind vertex buffer for model {}", i);
             if (renderObject.vertexBuffer) {
                 RHIBuffer* vertex_buffers[] = {renderObject.vertexBuffer};
                 RHIDeviceSize offsets[] = {0};
                 m_rhi->cmdBindVertexBuffersPFN(command_buffer, 0, 1, vertex_buffers, offsets);
+                // LOG_DEBUG("[MainCameraPass::drawModels] Vertex buffer bound for model {}", i);
             } else {
                 LOG_ERROR("[MainCameraPass::drawModels] Model {} has no vertex buffer", i);
                 continue;
             }
             
             // Bind index buffer
+            // LOG_DEBUG("[MainCameraPass::drawModels] About to bind index buffer for model {}", i);
             if (renderObject.indexBuffer) {
                 m_rhi->cmdBindIndexBufferPFN(command_buffer, renderObject.indexBuffer, 0, RHI_INDEX_TYPE_UINT32);
+                // LOG_DEBUG("[MainCameraPass::drawModels] Index buffer bound for model {}", i);
             } else {
                 LOG_ERROR("[MainCameraPass::drawModels] Model {} has no index buffer", i);
                 continue;
             }
             
             // 绑定模型渲染的描述符集
+            // LOG_DEBUG("[MainCameraPass::drawModels] About to bind descriptor sets for model {}", i);
             m_rhi->cmdBindDescriptorSetsPFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, 
                                           m_render_pipelines[1].pipelineLayout, 0, 1, 
                                           &renderObject.descriptorSets[m_rhi->getCurrentFrameIndex()], 0, nullptr);
-
+            // LOG_DEBUG("[MainCameraPass::drawModels] Descriptor sets bound for model {}", i);
             
             // Draw the model
+            // LOG_DEBUG("[MainCameraPass::drawModels] About to draw model {} with {} indices", i, renderObject.indices.size());
             if (!renderObject.indices.empty()) {
                 m_rhi->cmdDrawIndexedPFN(command_buffer, static_cast<uint32_t>(renderObject.indices.size()), 1, 0, 0, 0);
-    
+                // LOG_DEBUG("[MainCameraPass::drawModels] Model {} drawn successfully", i);
             } else {
                 LOG_WARN("[MainCameraPass::drawModels] Model {} has no indices to render", i);
             }
@@ -1081,7 +1187,7 @@ namespace Elish
                                uniformBuffers[i],
                                uniformBuffersMemory[i]);
         };
-         RHIDeviceSize bufferSizeOfView = sizeof(UniformBufferObject);
+         RHIDeviceSize bufferSizeOfView = sizeof(UniformBufferObjectView);
         
         // 为每个飞行中的帧创建独立的uniform缓冲区，确保帧之间完全隔离
         viewUniformBuffers.resize(maxFramesInFlight);
@@ -1101,22 +1207,14 @@ namespace Elish
         if (currentFrameIndex >= uniformBuffers.size()) {
             return;
         }
-        // Calculate rotation angle based on time
-        float time = static_cast<float>(glfwGetTime());
-        float rotationAngle = time * glm::radians(90.0f); // Rotate 90 degrees per second
-        // 创建MVP矩阵
+        
+        // 创建VP矩阵 (View-Projection, model矩阵现在通过Push Constants传递)
         UniformBufferObject ubo{};
         // 获取当前窗口尺寸
         auto swapchainInfo = m_rhi->getSwapchainInfo();
         float windowWidth = static_cast<float>(swapchainInfo.extent.width);
         float windowHeight = static_cast<float>(swapchainInfo.extent.height);
         float aspectRatio = windowWidth / windowHeight;
-        // 计算物体的模型矩阵。
-        // 它从一个单位矩阵 (glm::mat4(1.0f)) 开始，然后应用一个旋转。
-        // rotationAngle: 旋转角度（弧度）。
-        // glm::vec3(0.0f, 0.0f, 1.0f): 旋转轴，这里是绕Z轴旋转。
-        // 这使得物体绕其局部Z轴旋转。
-        ubo.model = glm::rotate(glm::mat4(1.0f), rotationAngle, glm::vec3(1.0f, 0.0f, 0.0f));
 
         // 使用RenderCamera计算视图矩阵和投影矩阵
         if (m_camera) {
@@ -1213,9 +1311,38 @@ namespace Elish
         // 验证重建后的资源
         swapchainInfo = m_rhi->getSwapchainInfo();
         depthInfo = m_rhi->getDepthImageInfo();
+    }
+
+    /**
+     * @brief 绘制UI内容（在UI子通道中执行）
+     * @param command_buffer 命令缓冲区
+     */
+    void MainCameraPass::drawUI(RHICommandBuffer* command_buffer)
+    {
+        // 获取UI Pass并执行绘制
+        auto render_system = g_runtime_global_context.m_render_system;
+        if (render_system)
+        {
+            auto render_pipeline_base = render_system->getRenderPipeline();
+            if (render_pipeline_base)
+            {
+                // 将基类指针转换为具体的RenderPipeline类型
+                auto render_pipeline = std::dynamic_pointer_cast<RenderPipeline>(render_pipeline_base);
+                if (render_pipeline)
+                {
+                    auto ui_pass = render_pipeline->getUIPass();
+                    if (ui_pass)
+                    {
+                        // 在UI子通道中绘制UI内容
+                        ui_pass->drawInSubpass(command_buffer);
+                    }
+                }
+            }
+        }
 
         // 更新相机的宽高比以适应新的窗口尺寸
         if (m_camera) {
+            auto swapchainInfo = m_rhi->getSwapchainInfo();
             float windowWidth = static_cast<float>(swapchainInfo.extent.width);
             float windowHeight = static_cast<float>(swapchainInfo.extent.height);
             float aspectRatio = windowWidth / windowHeight;

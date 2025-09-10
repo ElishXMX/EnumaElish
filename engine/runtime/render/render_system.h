@@ -1,6 +1,7 @@
 #pragma once
 #include "window_system.h"
 #include "interface/rhi.h"
+#include "render_resource.h"
 #include "../../3rdparty/json11/json11.hpp"
 
 #include <memory>
@@ -45,20 +46,24 @@ namespace Elish
           * @brief Load content resources from the content directory based on provided paths.
           * @param model_paths A map where keys are model names and values are their OBJ file paths.
           * @param model_texture_map A map where keys are model names and values are lists of their texture file paths.
+          * @param model_animation_params A map where keys are model names and values are their animation parameters.
           */
          void loadContentResources(const std::unordered_map<std::string, std::string>& model_paths,
-                                   const std::unordered_map<std::string, std::vector<std::string>>& model_texture_map);
+                                   const std::unordered_map<std::string, std::vector<std::string>>& model_texture_map,
+                                   const std::unordered_map<std::string, ModelAnimationParams>& model_animation_params);
 
          /**
           * @brief 从JSON文件加载资源配置
           * @param json_file_path JSON配置文件的路径
           * @param model_paths 输出参数：模型名称到文件路径的映射
           * @param model_texture_map 输出参数：模型名称到纹理文件路径列表的映射
+          * @param model_animation_params 输出参数：模型名称到动画参数的映射
           * @return 成功返回true，失败返回false
           */
          bool loadResourcesFromJson(const std::string& json_file_path,
                                    std::unordered_map<std::string, std::string>& model_paths,
-                                   std::unordered_map<std::string, std::vector<std::string>>& model_texture_map);
+                                   std::unordered_map<std::string, std::vector<std::string>>& model_texture_map,
+                                   std::unordered_map<std::string, ModelAnimationParams>& model_animation_params);
 
          /**
           * @brief 读取文件内容到字符串

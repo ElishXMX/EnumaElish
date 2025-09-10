@@ -1,8 +1,8 @@
 #pragma once
 
-#include "render_system.h"
 #include "../core/base/macro.h"
 #include "interface/vulkan/vulkan_rhi_resource.h"
+#include "../../3rdparty/json11/json11.hpp"
 #include <vector>
 #include <memory>
 #include <string>
@@ -134,8 +134,36 @@ namespace Elish {
     };    
 
 
+    /** 模型动画参数结构 */
+    struct ModelAnimationParams {
+        glm::vec3 position = glm::vec3(0.0f);       // 位置偏移
+        glm::vec3 rotation = glm::vec3(0.0f);       // 旋转角度 (弧度)
+        glm::vec3 scale = glm::vec3(1.0f);          // 缩放比例
+        glm::vec3 rotationAxis = glm::vec3(1.0f, 0.0f, 0.0f);  // 旋转轴
+        float rotationSpeed = 1.0f;                 // 旋转速度倍数
+        bool enableAnimation = true;                // 是否启用动画
+        bool isPlatform = false;                    // 是否为平台（保持静止）
+        
+        /**
+         * @brief 将动画参数序列化为JSON对象
+         * @return JSON对象
+         */
+        json11::Json toJson() const;
+        
+        /**
+         * @brief 从JSON对象反序列化动画参数
+         * @param json JSON对象
+         * @return 成功返回true，失败返回false
+         */
+        bool fromJson(const json11::Json& json);
+    };
+    
+
+
     /** 渲染一个模型需要的所有RHI资源*/
 	struct RenderObject {
+		std::string name;					// 模型名称
+		std::string modelName;				// 模型标识名称，用于识别和管理
 		std::vector<Vertex> vertices;		// 顶点
 		std::vector<uint32_t> indices;		// 点序
 		RHIBuffer* vertexBuffer;			// 顶点缓存
@@ -151,6 +179,9 @@ namespace Elish {
 		RHIDescriptorPool* descriptorPool;				// 描述符池
 		std::vector<RHIDescriptorSet*> descriptorSets;		// 描述符集合
 		RHIDescriptorSet* textureDescriptorSet;			// 纹理描述符集合
+        
+        // 新增：每个模型的独立动画参数
+        ModelAnimationParams animationParams;
 	};
 
 
@@ -207,6 +238,14 @@ namespace Elish {
          * @param renderObject 要添加的渲染对象
          */
         void addRenderObject(const RenderObject& renderObject);
+        
+        /**
+         * @brief 更新指定渲染对象的动画参数
+         * @param objectIndex 渲染对象的索引
+         * @param newParams 新的动画参数
+         * @return 更新是否成功
+         */
+        bool updateRenderObjectAnimationParams(size_t objectIndex, const ModelAnimationParams& newParams);
         // 创建一个渲染对象，包括对应的顶点和纹理
         bool createRenderObjectResource(RenderObject& outRenderObject, const std::string& objfile, const std::vector<std::string>& pngfiles);
         
@@ -269,6 +308,7 @@ namespace Elish {
         RHIImageView* m_cubemapImageView;
         RHISampler* cubemapSampler;		
         VmaAllocation m_cubemapImageAllocation;
+
         
         /**
          * @brief 加载OBJ模型文件

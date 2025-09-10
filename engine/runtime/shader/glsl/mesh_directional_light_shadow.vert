@@ -1,77 +1,31 @@
 #version 310 es
 
-#extension GL_GOOGLE_include_directive : enable
+// 简化的D-shadow顶点着色器
+// 移除复杂的顶点混合逻辑，只保留基本的变换功能
 
-#include "constants.h"
-#include "structures.h"
-
-layout(set = 0, binding = 0) readonly buffer _unused_name_global_set_per_frame_binding_buffer
+// 描述符集 0: 全局帧数据
+layout(set = 0, binding = 0) readonly buffer GlobalFrameBuffer
 {
-    mat4 light_proj_view;
+    mat4 light_proj_view;  // 光源的投影视图矩阵
 };
 
-layout(set = 0, binding = 1) readonly buffer _unused_name_per_drawcall
+// 描述符集 0: 实例变换矩阵数组
+layout(set = 0, binding = 1) readonly buffer InstanceDataBuffer
 {
-    VulkanMeshInstance mesh_instances[m_mesh_per_drawcall_max_instance_count];
+    mat4 model_matrices[];  // 简化的模型矩阵数组
 };
 
-layout(set = 0, binding = 2) readonly buffer _unused_name_per_drawcall_vertex_blending
-{
-    mat4 joint_matrices[m_mesh_vertex_blending_max_joint_count * m_mesh_per_drawcall_max_instance_count];
-};
-
-layout(set = 1, binding = 0) readonly buffer _unused_name_per_mesh_joint_binding
-{
-    VulkanMeshVertexJointBinding indices_and_weights[];
-};
-
+// 顶点输入
 layout(location = 0) in highp vec3 in_position;
 
 void main()
 {
-    highp mat4 RenderObject_matrix = mesh_instances[gl_InstanceIndex].RenderObject_matrix;
-    highp float enable_vertex_blending = mesh_instances[gl_InstanceIndex].enable_vertex_blending;
-
-    highp vec3 RenderObject_position;
-    if (enable_vertex_blending > 0.0)
-    {
-        highp ivec4 in_indices = indices_and_weights[gl_VertexIndex].indices;
-        highp vec4 in_weights = indices_and_weights[gl_VertexIndex].weights;
-
-        highp mat4 vertex_blending_matrix = mat4x4(
-            vec4(0.0, 0.0, 0.0, 0.0),
-            vec4(0.0, 0.0, 0.0, 0.0),
-            vec4(0.0, 0.0, 0.0, 0.0),
-            vec4(0.0, 0.0, 0.0, 0.0));
-
-        if (in_weights.x > 0.0 && in_indices.x > 0)
-        {
-            vertex_blending_matrix += joint_matrices[m_mesh_vertex_blending_max_joint_count * gl_InstanceIndex + in_indices.x] * in_weights.x;
-        }
-
-        if (in_weights.y > 0.0 && in_indices.y > 0)
-        {
-            vertex_blending_matrix += joint_matrices[m_mesh_vertex_blending_max_joint_count * gl_InstanceIndex + in_indices.y] * in_weights.y;
-        }
-
-        if (in_weights.z > 0.0 && in_indices.z > 0)
-        {
-            vertex_blending_matrix += joint_matrices[m_mesh_vertex_blending_max_joint_count * gl_InstanceIndex + in_indices.z] * in_weights.z;
-        }
-
-        if (in_weights.w > 0.0 && in_indices.w > 0)
-        {
-            vertex_blending_matrix += joint_matrices[m_mesh_vertex_blending_max_joint_count * gl_InstanceIndex + in_indices.w] * in_weights.w;
-        }
-
-        RenderObject_position = (vertex_blending_matrix * vec4(in_position, 1.0)).xyz;
-    }
-    else
-    {
-        RenderObject_position = in_position;
-    }
-
-    highp vec3 position_world_space = (RenderObject_matrix * vec4(RenderObject_position, 1.0)).xyz;
-
-    gl_Position = light_proj_view * vec4(position_world_space, 1.0f);
+    // 获取当前实例的变换矩阵
+    highp mat4 model_matrix = model_matrices[gl_InstanceIndex];
+    
+    // 将顶点位置变换到世界空间
+    highp vec3 world_position = (model_matrix * vec4(in_position, 1.0)).xyz;
+    
+    // 应用光源的投影视图矩阵，得到最终的裁剪空间位置
+    gl_Position = light_proj_view * vec4(world_position, 1.0);
 }

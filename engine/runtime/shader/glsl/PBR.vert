@@ -1,8 +1,13 @@
 #version 450
 
+// Push constants block for per-model transformation
+layout( push_constant ) uniform ModelConstants
+{
+    mat4 model;  // Per-model transformation matrix
+} modelConst;
+
 layout(set = 0, binding = 0) uniform UniformBufferObject
 {
-    mat4 model;
     mat4 view;
     mat4 proj;
 } ubo;
@@ -21,9 +26,9 @@ void main()
 {
     //vec3 newPosition = vec3(inPosition.x, inPosition.y, inPosition.z + sin(global.time) * 0.25);
     // Render object with MVP
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-    fragPosition = (ubo.model * vec4(inPosition, 1.0)).rgb;
-    fragNormal = (ubo.model * vec4(normalize(inNormal), 1.0)).rgb;
+    gl_Position = ubo.proj * ubo.view * modelConst.model * vec4(inPosition, 1.0);
+    fragPosition = (modelConst.model * vec4(inPosition, 1.0)).rgb;
+    fragNormal = (modelConst.model * vec4(normalize(inNormal), 1.0)).rgb;
     fragColor = inColor;
     fragTexCoord = inTexCoord;
 }

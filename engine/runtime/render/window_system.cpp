@@ -29,6 +29,7 @@ namespace Elish
             glfwTerminate();
             return;
         }
+        // LOG_DEBUG("GLFW window created successfully. Window pointer: {}", (void*)m_window);
 
         // Setup input callbacks
         glfwSetWindowUserPointer(m_window, this);

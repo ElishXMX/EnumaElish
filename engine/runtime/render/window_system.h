@@ -141,7 +141,15 @@ namespace Elish
                 app->m_height = height;
             }
         }
-        static void windowCloseCallback(GLFWwindow* window) { glfwSetWindowShouldClose(window, true); }
+        static void windowCloseCallback(GLFWwindow* window) 
+        {
+            WindowSystem* app = (WindowSystem*)glfwGetWindowUserPointer(window);
+            if (app)
+            {
+                app->onWindowClose();
+            }
+            glfwSetWindowShouldClose(window, true);
+        }
 
         void onReset()
         {
@@ -187,6 +195,11 @@ namespace Elish
         {
             for (auto& func : m_onDropFunc)
                 func(count, paths);
+        }
+        void onWindowClose()
+        {
+            for (auto& func : m_onWindowCloseFunc)
+                func();
         }
         void onWindowSize(int width, int height)
         {

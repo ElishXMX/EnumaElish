@@ -125,8 +125,13 @@ namespace Elish
 #elif defined(_MSC_VER)
         // https://docs.microsoft.com/en-us/cpp/preprocessor/predefined-macros
         char const* vk_layer_path = Elish_XSTR(Elish_VK_LAYER_PATH);
-        SetEnvironmentVariableA("VK_LAYER_PATH", vk_layer_path);
-        SetEnvironmentVariableA("DISABLE_LAYER_AMD_SWITCHABLE_GRAPHICS_1", "1");
+        // LOG_INFO("[VulkanRHI] VK_LAYER_PATH: {}", vk_layer_path);
+        if (!SetEnvironmentVariableA("VK_LAYER_PATH", vk_layer_path)) {
+            LOG_ERROR("[VulkanRHI] Failed to set VK_LAYER_PATH environment variable.");
+        }
+        if (!SetEnvironmentVariableA("DISABLE_LAYER_AMD_SWITCHABLE_GRAPHICS_1", "1")) {
+            LOG_ERROR("[VulkanRHI] Failed to set DISABLE_LAYER_AMD_SWITCHABLE_GRAPHICS_1 environment variable.");
+        }
 #else
 #error Unknown Compiler
 #endif
@@ -398,20 +403,25 @@ namespace Elish
 
     bool VulkanRHI::prepareBeforePass(std::function<void()> passUpdateAfterRecreateSwapchain)
     {
-
+        // LOG_DEBUG("[VULKAN_RHI] prepareBeforePass called");
         
         // Check if window size has changed
         int current_width = 0, current_height = 0;
         glfwGetFramebufferSize(m_window, &current_width, &current_height);
+        
+         // LOG_DEBUG("[VULKAN_RHI] Window size check - Current: {}x{}, Swapchain: {}x{}", 
+         //          current_width, current_height, m_swapchain_extent.width, m_swapchain_extent.height);
         
         if (current_width != static_cast<int>(m_swapchain_extent.width) || 
             current_height != static_cast<int>(m_swapchain_extent.height))
         {
             recreateSwapchain();
             passUpdateAfterRecreateSwapchain();
+            // LOG_DEBUG("[VULKAN_RHI] prepareBeforePass returning false due to window size change");
             return false; // Skip current frame after recreation
         }
         
+        // LOG_DEBUG("[VULKAN_RHI] Acquiring next swapchain image...");
         VkResult acquire_image_result =
             vkAcquireNextImageKHR(m_device,
                                   m_swapchain,
@@ -420,16 +430,18 @@ namespace Elish
                                   VK_NULL_HANDLE,
                                   &m_current_swapchain_image_index);
 
+        // LOG_DEBUG("[VULKAN_RHI] vkAcquireNextImageKHR result: {}", acquire_image_result);
+
         if (VK_ERROR_OUT_OF_DATE_KHR == acquire_image_result)
         {
-     
             recreateSwapchain();
             passUpdateAfterRecreateSwapchain();
+            // LOG_DEBUG("[VULKAN_RHI] prepareBeforePass returning false due to out of date swapchain");
             return false; // 交换链过期，需要跳过当前帧
         }
         else if (VK_SUBOPTIMAL_KHR == acquire_image_result)
         {
-    
+            // LOG_INFO("[VULKAN_RHI] Swapchain suboptimal, recreating");
             recreateSwapchain();
             passUpdateAfterRecreateSwapchain();
 
@@ -500,6 +512,8 @@ namespace Elish
             LOG_ERROR("_vkBeginCommandBuffer failed!");
             return false;
         }
+
+        // LOG_INFO("[VULKAN_RHI] prepareBeforePass completed successfully");
         return true;
     }
 
@@ -907,6 +921,7 @@ namespace Elish
         _vkCmdBindIndexBuffer    = (PFN_vkCmdBindIndexBuffer)vkGetDeviceProcAddr(m_device, "vkCmdBindIndexBuffer");
         _vkCmdBindDescriptorSets = (PFN_vkCmdBindDescriptorSets)vkGetDeviceProcAddr(m_device, "vkCmdBindDescriptorSets");
         _vkCmdClearAttachments   = (PFN_vkCmdClearAttachments)vkGetDeviceProcAddr(m_device, "vkCmdClearAttachments");
+        _vkCmdPushConstants      = (PFN_vkCmdPushConstants)vkGetDeviceProcAddr(m_device, "vkCmdPushConstants");
 
         m_depth_image_format = (RHIFormat)findDepthFormat();
     }
@@ -1218,8 +1233,32 @@ namespace Elish
             vk_pipeline_shader_stage_create_info_element.pNext = (const void*)rhi_pipeline_shader_stage_create_info_element.pNext;
             vk_pipeline_shader_stage_create_info_element.flags = (VkPipelineShaderStageCreateFlags)rhi_pipeline_shader_stage_create_info_element.flags;
             vk_pipeline_shader_stage_create_info_element.stage = (VkShaderStageFlagBits)rhi_pipeline_shader_stage_create_info_element.stage;
-            vk_pipeline_shader_stage_create_info_element.module = ((VulkanShader*)rhi_pipeline_shader_stage_create_info_element.module)->getResource();
+            
+            // 检查着色器模块指针是否有效
+            if (rhi_pipeline_shader_stage_create_info_element.module == nullptr)
+            {
+                LOG_ERROR("Shader module is null for stage {}", i);
+                return false;
+            }
+            
+            VulkanShader* vulkan_shader = (VulkanShader*)rhi_pipeline_shader_stage_create_info_element.module;
+            if (vulkan_shader == nullptr)
+            {
+                LOG_ERROR("VulkanShader cast failed for stage {}", i);
+                return false;
+            }
+            
+            VkShaderModule shader_resource = vulkan_shader->getResource();
+            if (shader_resource == VK_NULL_HANDLE)
+            {
+                LOG_ERROR("Shader resource is VK_NULL_HANDLE for stage {}", i);
+                return false;
+            }
+            
+            vk_pipeline_shader_stage_create_info_element.module = shader_resource;
             vk_pipeline_shader_stage_create_info_element.pName = rhi_pipeline_shader_stage_create_info_element.pName;
+            
+            
         };
 
         if (!((specialization_map_entry_size_total == specialization_map_entry_current)
@@ -1231,7 +1270,16 @@ namespace Elish
 
 
         //vertex_input_binding_description
+        
+        
+        // Check if pVertexInputState is null
+        if (pCreateInfo->pVertexInputState == nullptr) {
+            LOG_ERROR("pVertexInputState is null");
+            return false;
+        }
+        
         int vertex_input_binding_description_size = pCreateInfo->pVertexInputState->vertexBindingDescriptionCount;
+        
 
         std::vector<VkVertexInputBindingDescription> vk_vertex_input_binding_description_list(vertex_input_binding_description_size);
 
@@ -1250,7 +1298,9 @@ namespace Elish
 
 
         //vertex_input_attribute_description
+        
         int vertex_input_attribute_description_size = pCreateInfo->pVertexInputState->vertexAttributeDescriptionCount;
+        
 
         std::vector<VkVertexInputAttributeDescription> vk_vertex_input_attribute_description_list(vertex_input_attribute_description_size);
 
@@ -1269,6 +1319,7 @@ namespace Elish
         };
 
 
+        
         VkPipelineVertexInputStateCreateInfo vk_pipeline_vertex_input_state_create_info{};
         vk_pipeline_vertex_input_state_create_info.sType = (VkStructureType)pCreateInfo->pVertexInputState->sType;
         vk_pipeline_vertex_input_state_create_info.pNext = (const void*)pCreateInfo->pVertexInputState->pNext;
@@ -1279,6 +1330,14 @@ namespace Elish
         vk_pipeline_vertex_input_state_create_info.pVertexAttributeDescriptions = vk_vertex_input_attribute_description_list.data();
 
 
+        
+        
+        // Check if pInputAssemblyState is null
+        if (pCreateInfo->pInputAssemblyState == nullptr) {
+            LOG_ERROR("pInputAssemblyState is null");
+            return false;
+        }
+        
         VkPipelineInputAssemblyStateCreateInfo vk_pipeline_input_assembly_state_create_info{};
         vk_pipeline_input_assembly_state_create_info.sType = (VkStructureType)pCreateInfo->pInputAssemblyState->sType;
         vk_pipeline_input_assembly_state_create_info.pNext = (const void*)pCreateInfo->pInputAssemblyState->pNext;
@@ -1301,19 +1360,28 @@ namespace Elish
 
 
         //viewport
+        
+        
+        // Check if pViewportState is null
+        if (pCreateInfo->pViewportState == nullptr) {
+            LOG_ERROR("pViewportState is null");
+            return false;
+        }
 
         int viewport_size = pCreateInfo->pViewportState->viewportCount;
+        
 
         
         std::vector<VkViewport> vk_viewport_list;
         VkViewport* vk_viewport_ptr = nullptr;
         
         // Check if pViewports is null (allowed for dynamic state)
+        
         if (pCreateInfo->pViewportState->pViewports == nullptr) {
-
+            
             // For dynamic state, we don't need to set viewport data
         } else {
-
+            
             vk_viewport_list.resize(viewport_size);
             for (int i = 0; i < viewport_size; ++i)
             {
@@ -1332,15 +1400,19 @@ namespace Elish
 
 
         //rect_2d (scissor)
+        
         int rect_2d_size = pCreateInfo->pViewportState->scissorCount;
+        
         std::vector<VkRect2D> vk_rect_2d_list;
         VkRect2D* vk_rect_2d_ptr = nullptr;
         
         // Check if pScissors is null (allowed for dynamic state)
+        
         if (pCreateInfo->pViewportState->pScissors == nullptr) {
-
+            
             // For dynamic state, we don't need to set scissor data
         } else {
+            
 
             vk_rect_2d_list.resize(rect_2d_size);
             for (int i = 0; i < rect_2d_size; ++i)
@@ -1362,6 +1434,7 @@ namespace Elish
             vk_rect_2d_ptr = vk_rect_2d_list.data();
         }
 
+        
         VkPipelineViewportStateCreateInfo vk_pipeline_viewport_state_create_info{};
         vk_pipeline_viewport_state_create_info.sType = (VkStructureType)pCreateInfo->pViewportState->sType;
         vk_pipeline_viewport_state_create_info.pNext = (const void*)pCreateInfo->pViewportState->pNext;
@@ -1371,6 +1444,11 @@ namespace Elish
         vk_pipeline_viewport_state_create_info.scissorCount = pCreateInfo->pViewportState->scissorCount;
         vk_pipeline_viewport_state_create_info.pScissors = vk_rect_2d_list.data();
 
+        
+        if (pCreateInfo->pRasterizationState == nullptr) {
+            LOG_ERROR("pRasterizationState is null!");
+            return false;
+        }
         VkPipelineRasterizationStateCreateInfo vk_pipeline_rasterization_state_create_info{};
         vk_pipeline_rasterization_state_create_info.sType = (VkStructureType)pCreateInfo->pRasterizationState->sType;
         vk_pipeline_rasterization_state_create_info.pNext = (const void*)pCreateInfo->pRasterizationState->pNext;
@@ -1386,6 +1464,11 @@ namespace Elish
         vk_pipeline_rasterization_state_create_info.depthBiasSlopeFactor = pCreateInfo->pRasterizationState->depthBiasSlopeFactor;
         vk_pipeline_rasterization_state_create_info.lineWidth = pCreateInfo->pRasterizationState->lineWidth;
 
+        
+        if (pCreateInfo->pMultisampleState == nullptr) {
+            LOG_ERROR("pMultisampleState is null!");
+            return false;
+        }
         VkPipelineMultisampleStateCreateInfo vk_pipeline_multisample_state_create_info{};
         vk_pipeline_multisample_state_create_info.sType = (VkStructureType)pCreateInfo->pMultisampleState->sType;
         vk_pipeline_multisample_state_create_info.pNext = (const void*)pCreateInfo->pMultisampleState->pNext;
@@ -1397,6 +1480,11 @@ namespace Elish
         vk_pipeline_multisample_state_create_info.alphaToCoverageEnable = (VkBool32)pCreateInfo->pMultisampleState->alphaToCoverageEnable;
         vk_pipeline_multisample_state_create_info.alphaToOneEnable = (VkBool32)pCreateInfo->pMultisampleState->alphaToOneEnable;
 
+        
+        if (pCreateInfo->pDepthStencilState == nullptr) {
+            LOG_ERROR("pDepthStencilState is null!");
+            return false;
+        }
         VkStencilOpState stencil_op_state_front{};
         stencil_op_state_front.failOp = (VkStencilOp)pCreateInfo->pDepthStencilState->front.failOp;
         stencil_op_state_front.passOp = (VkStencilOp)pCreateInfo->pDepthStencilState->front.passOp;
@@ -1431,12 +1519,25 @@ namespace Elish
         vk_pipeline_depth_stencil_state_create_info.maxDepthBounds = pCreateInfo->pDepthStencilState->maxDepthBounds;
 
         //pipeline_color_blend_attachment_state
+        
+        if (pCreateInfo->pColorBlendState == nullptr) {
+            LOG_ERROR("pColorBlendState is null!");
+            return false;
+        }
         int pipeline_color_blend_attachment_state_size = pCreateInfo->pColorBlendState->attachmentCount;
-        std::vector<VkPipelineColorBlendAttachmentState> vk_pipeline_color_blend_attachment_state_list(pipeline_color_blend_attachment_state_size);
-        for (int i = 0; i < pipeline_color_blend_attachment_state_size; ++i)
-        {
-            const auto& rhi_pipeline_color_blend_attachment_state_element = pCreateInfo->pColorBlendState->pAttachments[i];
-            auto& vk_pipeline_color_blend_attachment_state_element = vk_pipeline_color_blend_attachment_state_list[i];
+        
+        
+        std::vector<VkPipelineColorBlendAttachmentState> vk_pipeline_color_blend_attachment_state_list;
+        
+        // 只有当附件数量大于0时才处理附件
+        if (pipeline_color_blend_attachment_state_size > 0) {
+            
+            vk_pipeline_color_blend_attachment_state_list.resize(pipeline_color_blend_attachment_state_size);
+            
+            for (int i = 0; i < pipeline_color_blend_attachment_state_size; ++i)
+            {
+                const auto& rhi_pipeline_color_blend_attachment_state_element = pCreateInfo->pColorBlendState->pAttachments[i];
+                auto& vk_pipeline_color_blend_attachment_state_element = vk_pipeline_color_blend_attachment_state_list[i];
 
             vk_pipeline_color_blend_attachment_state_element.blendEnable = (VkBool32)rhi_pipeline_color_blend_attachment_state_element.blendEnable;
             vk_pipeline_color_blend_attachment_state_element.srcColorBlendFactor = (VkBlendFactor)rhi_pipeline_color_blend_attachment_state_element.srcColorBlendFactor;
@@ -1446,7 +1547,10 @@ namespace Elish
             vk_pipeline_color_blend_attachment_state_element.dstAlphaBlendFactor = (VkBlendFactor)rhi_pipeline_color_blend_attachment_state_element.dstAlphaBlendFactor;
             vk_pipeline_color_blend_attachment_state_element.alphaBlendOp = (VkBlendOp)rhi_pipeline_color_blend_attachment_state_element.alphaBlendOp;
             vk_pipeline_color_blend_attachment_state_element.colorWriteMask = (VkColorComponentFlags)rhi_pipeline_color_blend_attachment_state_element.colorWriteMask;
-        };
+            }
+        } else {
+            // LOG_INFO("No color blend attachments to process (count is 0)");
+        }
 
         VkPipelineColorBlendStateCreateInfo vk_pipeline_color_blend_state_create_info{};
         vk_pipeline_color_blend_state_create_info.sType = (VkStructureType)pCreateInfo->pColorBlendState->sType;
@@ -1455,30 +1559,48 @@ namespace Elish
         vk_pipeline_color_blend_state_create_info.logicOpEnable = pCreateInfo->pColorBlendState->logicOpEnable;
         vk_pipeline_color_blend_state_create_info.logicOp = (VkLogicOp)pCreateInfo->pColorBlendState->logicOp;
         vk_pipeline_color_blend_state_create_info.attachmentCount = pCreateInfo->pColorBlendState->attachmentCount;
-        vk_pipeline_color_blend_state_create_info.pAttachments = vk_pipeline_color_blend_attachment_state_list.data();
+        // 根据附件数量设置指针
+        vk_pipeline_color_blend_state_create_info.pAttachments = pipeline_color_blend_attachment_state_size > 0 ? vk_pipeline_color_blend_attachment_state_list.data() : nullptr;
+        
         for (int i = 0; i < 4; ++i)
         {
             vk_pipeline_color_blend_state_create_info.blendConstants[i] = pCreateInfo->pColorBlendState->blendConstants[i];
         };
 
         //dynamic_state
+        
+        if (!pCreateInfo->pDynamicState) {
+            LOG_ERROR("pDynamicState is null!");
+            return false;
+        }
+        
         int dynamic_state_size = pCreateInfo->pDynamicState->dynamicStateCount;
-        std::vector<VkDynamicState> vk_dynamic_state_list(dynamic_state_size);
-        for (int i = 0; i < dynamic_state_size; ++i)
-        {
-            const auto& rhi_dynamic_state_element = pCreateInfo->pDynamicState->pDynamicStates[i];
-            auto& vk_dynamic_state_element = vk_dynamic_state_list[i];
+        
+        
+        std::vector<VkDynamicState> vk_dynamic_state_list;
+        if (dynamic_state_size > 0) {
+            vk_dynamic_state_list.resize(dynamic_state_size);
+            
+            for (int i = 0; i < dynamic_state_size; ++i)
+            {
+                const auto& rhi_dynamic_state_element = pCreateInfo->pDynamicState->pDynamicStates[i];
+                auto& vk_dynamic_state_element = vk_dynamic_state_list[i];
 
-            vk_dynamic_state_element = (VkDynamicState)rhi_dynamic_state_element;
-        };
+                vk_dynamic_state_element = (VkDynamicState)rhi_dynamic_state_element;
+            }
+        } else {
+            
+        }
 
         VkPipelineDynamicStateCreateInfo vk_pipeline_dynamic_state_create_info{};
         vk_pipeline_dynamic_state_create_info.sType = (VkStructureType)pCreateInfo->pDynamicState->sType;
         vk_pipeline_dynamic_state_create_info.pNext = pCreateInfo->pDynamicState->pNext;
         vk_pipeline_dynamic_state_create_info.flags = (VkPipelineDynamicStateCreateFlags)pCreateInfo->pDynamicState->flags;
         vk_pipeline_dynamic_state_create_info.dynamicStateCount = pCreateInfo->pDynamicState->dynamicStateCount;
-        vk_pipeline_dynamic_state_create_info.pDynamicStates = vk_dynamic_state_list.data();
+        vk_pipeline_dynamic_state_create_info.pDynamicStates = dynamic_state_size > 0 ? vk_dynamic_state_list.data() : nullptr;
+        
 
+        
         VkGraphicsPipelineCreateInfo create_info{};
         create_info.sType = (VkStructureType)pCreateInfo->sType;
         create_info.pNext = (const void*)pCreateInfo->pNext;
@@ -1494,18 +1616,33 @@ namespace Elish
         create_info.pDepthStencilState = &vk_pipeline_depth_stencil_state_create_info;
         create_info.pColorBlendState = &vk_pipeline_color_blend_state_create_info;
         create_info.pDynamicState = &vk_pipeline_dynamic_state_create_info;
+        
+        
+        if (!pCreateInfo->layout) {
+            LOG_ERROR("Pipeline layout is null!");
+            return false;
+        }
+        if (!pCreateInfo->renderPass) {
+            LOG_ERROR("Render pass is null!");
+            return false;
+        }
+        
         create_info.layout = ((VulkanPipelineLayout*)pCreateInfo->layout)->getResource();
         create_info.renderPass = ((VulkanRenderPass*)pCreateInfo->renderPass)->getResource();
         create_info.subpass = pCreateInfo->subpass;
+        
         if (pCreateInfo->basePipelineHandle != nullptr)
         {
             create_info.basePipelineHandle = ((VulkanPipeline*)pCreateInfo->basePipelineHandle)->getResource();
+            
         }
         else
         {
             create_info.basePipelineHandle = VK_NULL_HANDLE;
+            
         }
         create_info.basePipelineIndex = pCreateInfo->basePipelineIndex;
+        
 
         pPipelines = new VulkanPipeline();
         VkPipeline vk_pipelines;
@@ -1514,17 +1651,68 @@ namespace Elish
         {
             vk_pipeline_cache = ((VulkanPipelineCache*)pipelineCache)->getResource();
         }
-        VkResult result = vkCreateGraphicsPipelines(m_device, vk_pipeline_cache, createInfoCount, &create_info, nullptr, &vk_pipelines);
-        ((VulkanPipeline*)pPipelines)->setResource(vk_pipelines);
+        // LOG_INFO("[VulkanRHI::createGraphicsPipelines] Starting graphics pipeline creation");
+         
 
+        
+         
+
+        
+        // 验证关键参数
+        if (m_device == VK_NULL_HANDLE) {
+            LOG_ERROR("[VulkanRHI::createGraphicsPipelines] Device is null!");
+            return false;
+        }
+        if (create_info.layout == VK_NULL_HANDLE) {
+            LOG_ERROR("[VulkanRHI::createGraphicsPipelines] Pipeline layout is null!");
+            return false;
+        }
+        if (create_info.renderPass == VK_NULL_HANDLE) {
+            LOG_ERROR("[VulkanRHI::createGraphicsPipelines] Render pass is null!");
+            return false;
+        }
+        
+        // 详细验证所有状态指针
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        VkResult result = vkCreateGraphicsPipelines(m_device, vk_pipeline_cache, createInfoCount, &create_info, nullptr, &vk_pipelines);
+        
+        
         if (result == VK_SUCCESS)
         {
-    
+            // LOG_INFO("[VulkanRHI::createGraphicsPipelines] Graphics pipeline created successfully: {}", (void*)vk_pipelines);
+            ((VulkanPipeline*)pPipelines)->setResource(vk_pipelines);
             return RHI_SUCCESS;
         }
         else
         {
-            LOG_ERROR("vkCreateGraphicsPipelines failed!");
+            LOG_ERROR("[VulkanRHI::createGraphicsPipelines] vkCreateGraphicsPipelines failed with VkResult: {}", static_cast<int>(result));
+            
+            // 详细的错误信息
+            switch (result) {
+                case VK_ERROR_OUT_OF_HOST_MEMORY:
+                    LOG_ERROR("[VulkanRHI::createGraphicsPipelines] Error: VK_ERROR_OUT_OF_HOST_MEMORY");
+                    break;
+                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+                    LOG_ERROR("[VulkanRHI::createGraphicsPipelines] Error: VK_ERROR_OUT_OF_DEVICE_MEMORY");
+                    break;
+                case VK_ERROR_INVALID_SHADER_NV:
+                    LOG_ERROR("[VulkanRHI::createGraphicsPipelines] Error: VK_ERROR_INVALID_SHADER_NV - Invalid shader");
+                    break;
+                default:
+                    LOG_ERROR("[VulkanRHI::createGraphicsPipelines] Error: Unknown VkResult code {}", static_cast<int>(result));
+                    break;
+            }
+            
             return false;
         }
     }
@@ -2274,6 +2462,20 @@ namespace Elish
             vk_clear_attachment_list.data(),
             rectCount,
             vk_clear_rect_list.data());
+    }
+
+    /**
+     * @brief 推送常量数据到着色器
+     * @param commandBuffer 命令缓冲区
+     * @param layout 管线布局
+     * @param stageFlags 着色器阶段标志
+     * @param offset 偏移量
+     * @param size 数据大小
+     * @param pValues 数据指针
+     */
+    void VulkanRHI::cmdPushConstantsPFN(RHICommandBuffer* commandBuffer, RHIPipelineLayout* layout, RHIShaderStageFlags stageFlags, uint32_t offset, uint32_t size, const void* pValues)
+    {
+        return _vkCmdPushConstants(((VulkanCommandBuffer*)commandBuffer)->getResource(), ((VulkanPipelineLayout*)layout)->getResource(), (VkShaderStageFlags)stageFlags, offset, size, pValues);
     }
 
     bool VulkanRHI::beginCommandBuffer(RHICommandBuffer* commandBuffer, const RHICommandBufferBeginInfo* pBeginInfo)

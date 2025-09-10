@@ -159,8 +159,8 @@ namespace Elish
          auto now = std::chrono::high_resolution_clock::now();
          auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
          
-        //  LOG_DEBUG("[CAMERA_INPUT][{}ms] processInput called - Command: 0x{:X}, Yaw: {:.6f}, Pitch: {:.6f}, DeltaTime: {:.6f}", 
-        //            timestamp, game_command, cursor_delta_yaw, cursor_delta_pitch, delta_time);
+         // LOG_DEBUG("[CAMERA_INPUT][{}ms] processInput called - Command: 0x{:X}, Yaw: {:.6f}, Pitch: {:.6f}, DeltaTime: {:.6f}", 
+         //           timestamp, game_command, cursor_delta_yaw, cursor_delta_pitch, delta_time);
          
          // 计算移动距离（基于时间的平滑移动）
          float move_distance = CAMERA_MOVE_SPEED * delta_time;
@@ -206,27 +206,27 @@ namespace Elish
          
          if (!movement_info.empty())
          {
-             LOG_DEBUG("[CAMERA_MOVEMENT][{}ms] Movement detected - Commands: [{}], Distance: {:.4f}", 
-                       timestamp, movement_info, move_distance);
+             // LOG_DEBUG("[CAMERA_MOVEMENT][{}ms] Movement detected - Commands: [{}], Distance: {:.4f}", 
+                       // timestamp, movement_info, move_distance);
          }
          
          // 处理鼠标旋转（应用灵敏度）
          if (std::abs(cursor_delta_yaw) > 0.001f || std::abs(cursor_delta_pitch) > 0.001f)
          {
-            //  LOG_DEBUG("[CAMERA_ROTATION][{}ms] Mouse rotation input - Raw delta: ({:.6f}, {:.6f}), Sensitivity: {:.4f}", 
-            //            timestamp, cursor_delta_yaw, cursor_delta_pitch, CAMERA_MOUSE_SENSITIVITY);
+             // LOG_DEBUG("[CAMERA_ROTATION][{}ms] Mouse rotation input - Raw delta: ({:.6f}, {:.6f}), Sensitivity: {:.4f}", 
+             //           timestamp, cursor_delta_yaw, cursor_delta_pitch, CAMERA_MOUSE_SENSITIVITY);
              
              glm::vec2 mouse_delta(cursor_delta_yaw * CAMERA_MOUSE_SENSITIVITY, 
                                    cursor_delta_pitch * CAMERA_MOUSE_SENSITIVITY);
              
-            //  LOG_DEBUG("[CAMERA_ROTATION][{}ms] Applying rotation - Final delta: ({:.6f}, {:.6f})", 
-            //            timestamp, mouse_delta.x, mouse_delta.y);
+             // LOG_DEBUG("[CAMERA_ROTATION][{}ms] Applying rotation - Final delta: ({:.6f}, {:.6f})", 
+             //           timestamp, mouse_delta.x, mouse_delta.y);
              
              rotate(mouse_delta);
          }
          else
          {
-             LOG_DEBUG("[CAMERA_ROTATION][{}ms] No mouse rotation input", timestamp);
+             // LOG_DEBUG("[CAMERA_ROTATION][{}ms] No mouse rotation input", timestamp);
          }
      }
  } // namespace Elish

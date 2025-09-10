@@ -27,6 +27,7 @@ namespace Elish
     public:
         void onKey(int key, int scancode, int action, int mods);
         void onCursorPos(double current_cursor_x, double current_cursor_y);
+        void onMouseButton(int button, int action, int mods);
 
         void initialize();
         void tick();
@@ -38,6 +39,16 @@ namespace Elish
         // 光标移动对应的角度变化（弧度）
         float m_cursor_delta_yaw {0.0f};
         float m_cursor_delta_pitch {0.0f};
+        
+        // 鼠标按钮状态跟踪
+        bool m_mouse_left_pressed {false};
+        bool m_mouse_right_pressed {false};
+        bool m_is_dragging {false};
+        
+        // 拖动检测参数
+        double m_drag_start_x {0.0};
+        double m_drag_start_y {0.0};
+        static constexpr double DRAG_THRESHOLD = 2.0; // 像素阈值，超过此值认为是拖动
 
         void         resetGameCommand() { m_game_command = 0; }
         unsigned int getGameCommand() const { return m_game_command; }
@@ -58,7 +69,7 @@ namespace Elish
         // 摄像机控制参数
         static constexpr float CAMERA_MOVE_SPEED = 1.0f;
         static constexpr float CAMERA_SPRINT_MULTIPLIER = 3.0f;
-        static constexpr float CAMERA_MOUSE_SENSITIVITY = 0.1f;
+        static constexpr float CAMERA_MOUSE_SENSITIVITY = 2.0f; // 增加鼠标灵敏度，实现更自由的视角旋转
 
     private:
         void onKeyInGameMode(int key, int scancode, int action, int mods);

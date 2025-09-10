@@ -96,6 +96,7 @@ namespace Elish
             const uint32_t* pDynamicOffsets) override;
         void cmdDrawIndexedPFN(RHICommandBuffer* commandBuffer, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override;
         void cmdClearAttachmentsPFN(RHICommandBuffer* commandBuffer, uint32_t attachmentCount, const RHIClearAttachment* pAttachments, uint32_t rectCount, const RHIClearRect* pRects) override;
+        void cmdPushConstantsPFN(RHICommandBuffer* commandBuffer, RHIPipelineLayout* layout, RHIShaderStageFlags stageFlags, uint32_t offset, uint32_t size, const void* pValues) override;
 
         bool beginCommandBuffer(RHICommandBuffer* commandBuffer, const RHICommandBufferBeginInfo* pBeginInfo) override;
         void cmdCopyImageToBuffer(RHICommandBuffer* commandBuffer, RHIImage* srcImage, RHIImageLayout srcImageLayout, RHIBuffer* dstBuffer, uint32_t regionCount, const RHIBufferImageCopy* pRegions) override;
@@ -229,6 +230,7 @@ namespace Elish
         PFN_vkCmdBindDescriptorSets _vkCmdBindDescriptorSets;
         PFN_vkCmdDrawIndexed        _vkCmdDrawIndexed;
         PFN_vkCmdClearAttachments   _vkCmdClearAttachments;
+        PFN_vkCmdPushConstants      _vkCmdPushConstants;
 
         // global descriptor pool
         VkDescriptorPool m_vk_descriptor_pool;

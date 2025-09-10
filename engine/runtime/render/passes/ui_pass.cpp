@@ -6,6 +6,7 @@
 #include "../../global/global_context.h"
 #include "../window_system.h"
 #include "../render_pipeline_base.h"
+#include "../render_system.h"
 
 // ImGui 相关头文件
 #include <imgui.h>
@@ -13,9 +14,17 @@
 #include <backends/imgui_impl_vulkan.h>
 
 #include <stdexcept>
+#include <fstream>
+#include "../../3rdparty/json11/json11.hpp"
 
 namespace Elish
 {
+    UIPass::UIPass()
+    {
+        // LOG_INFO("[UIPass] UIPass constructor called.");
+        setupImGuiContext();
+    }
+
     /**
      * @brief UIPass类的析构函数
      * 负责清理ImGui相关资源
@@ -31,7 +40,7 @@ namespace Elish
      */
     void UIPass::initialize()
     {
-        LOG_INFO("[UIPass] Initializing UI Pass...");
+        
         
         // 设置ImGui上下文
         setupImGuiContext();
@@ -42,7 +51,7 @@ namespace Elish
         // 初始化ImGui的Vulkan后端
         initializeImGuiVulkan();
         
-        LOG_INFO("[UIPass] UI Pass initialized successfully");
+        
     }
 
     /**
@@ -64,7 +73,7 @@ namespace Elish
     {
         if (!m_imgui_initialized)
         {
-            LOG_WARN("[UIPass] ImGui not initialized, skipping UI rendering");
+            
             return;
         }
 
@@ -97,6 +106,7 @@ namespace Elish
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
+        // LOG_INFO("[UIPass] ImGui context created.");
         
         // 启用键盘和游戏手柄控制
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -104,8 +114,38 @@ namespace Elish
         
         // 设置ImGui样式
         ImGui::StyleColorsDark();
+
+        // 加载中文字体
+        // 检查字体文件是否存在，如果不存在则使用默认字体
+        // 微软雅黑字体路径，通常在Windows系统上可用
+        const char* font_path = "C:\\Windows\\Fonts\\msyh.ttc";
+        ImFontConfig font_cfg;
+        font_cfg.FontDataOwnedByAtlas = false; // 字体数据由我们管理
+        // 合并到默认字体，这样可以保留默认字体的ASCII字符，同时添加中文支持
+        // 如果只加载中文字体，可能会导致英文字符显示不正常
+        ImFont* default_font = io.Fonts->AddFontDefault(&font_cfg);
+        if (default_font) {
+            // LOG_INFO("[UIPass] Default font added.");
+        } else {
+            LOG_ERROR("[UIPass] Failed to add default font.");
+        }
         
-        LOG_INFO("[UIPass] ImGui context created");
+        // 添加中文字体，指定字体大小
+        // 注意：ImGui内部使用UTF-8编码，所以传入的字符串应该是UTF-8编码
+        // 如果你的字符串是GBK编码，需要先转换为UTF-8
+        // LOG_INFO("[UIPass] Attempting to load Chinese font from: %s with size 16.0f", font_path);
+        ImFont* font = io.Fonts->AddFontFromFileTTF(font_path, 16.0f, &font_cfg, io.Fonts->GetGlyphRangesChineseFull());
+        if (font)
+        {
+            // LOG_INFO("[UIPass] Successfully loaded Chinese font: %s", font_path);
+        }
+        else
+        {
+            LOG_ERROR("[UIPass] Failed to load Chinese font: %s. Using default font. Error: Font pointer is null.", font_path);
+        }
+
+        
+        
     }
 
     /**
@@ -132,7 +172,7 @@ namespace Elish
             throw std::runtime_error("[UIPass] Failed to initialize ImGui GLFW backend");
         }
         
-        LOG_INFO("[UIPass] ImGui GLFW backend initialized");
+        
     }
 
     /**
@@ -156,7 +196,7 @@ namespace Elish
         init_info.Queue = static_cast<VulkanQueue*>(vulkan_rhi->getGraphicsQueue())->getResource();
         init_info.PipelineCache = VK_NULL_HANDLE;
         init_info.DescriptorPool = static_cast<VulkanDescriptorPool*>(vulkan_rhi->getDescriptorPoor())->getResource();
-        init_info.Subpass = 0; // 使用主相机渲染通道的子通道0
+        init_info.Subpass = 1; // 使用主相机渲染通道的子通道1（UI子通道）
         init_info.MinImageCount = vulkan_rhi->getMaxFramesInFlight();
         init_info.ImageCount = vulkan_rhi->getMaxFramesInFlight();
         init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
@@ -181,7 +221,7 @@ namespace Elish
         uploadFonts(vulkan_rhi);
         
         m_imgui_initialized = true;
-        LOG_INFO("[UIPass] ImGui Vulkan backend initialized");
+        
     }
 
     /**
@@ -230,44 +270,232 @@ namespace Elish
         // 销毁CPU端的字体纹理数据
         ImGui_ImplVulkan_DestroyFontUploadObjects();
         
-        LOG_INFO("[UIPass] ImGui fonts uploaded to GPU");
+        // LOG_INFO("[UIPass] ImGui fonts uploaded to GPU");
     }
 
     /**
      * @brief 渲染UI内容
-     * 显示基础文本用于功能验证
+     * 显示模型变换控制界面
      */
     void UIPass::renderUIContent()
     {
-        // 创建一个简单的调试窗口
-        ImGui::Begin("EnumaElish Engine - Debug Info");
-        
-        ImGui::Text("欢迎使用 EnumaElish 渲染引擎!");
-        ImGui::Text("UI Pass 功能验证成功");
-        ImGui::Separator();
-        
-        // 显示帧率信息
-        ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 
-                   1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-        
-        // 显示渲染统计信息
+        // 性能信息窗口（简化版）
+        ImGui::Begin("Performance", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         if (m_render_resource)
         {
-            ImGui::Text("已加载模型数量: %zu", m_render_resource->getLoadedRenderObjects().size());
+            ImGui::Text("Models: %zu", m_render_resource->getLoadedRenderObjects().size());
+        }
+        ImGui::End();
+        
+        // Model Transform Control Window
+        ImGui::Begin("Transform Control");
+        
+        if (m_render_resource && !m_render_resource->getLoadedRenderObjects().empty())
+        {
+            auto& renderObjects = m_render_resource->getLoadedRenderObjects();
+            static int selected_model = 0;
+            
+            // Model selection combo box
+            ImGui::PushItemWidth(-1);
+            if (ImGui::BeginCombo("##Model", selected_model < renderObjects.size() ? renderObjects[selected_model].name.c_str() : "Select Model"))
+            {
+                for (size_t i = 0; i < renderObjects.size(); ++i)
+                {
+                    bool is_selected = (selected_model == static_cast<int>(i));
+                    if (ImGui::Selectable(renderObjects[i].name.c_str(), is_selected))
+                    {
+                        selected_model = static_cast<int>(i);
+                    }
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopItemWidth();
+            
+            if (selected_model >= 0 && selected_model < static_cast<int>(renderObjects.size()))
+            {
+                auto& selectedObject = renderObjects[selected_model];
+                auto& animParams = selectedObject.animationParams;
+                
+                ImGui::Spacing();
+                
+                // Position controls
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("P:"); ImGui::SameLine();
+                float position[3] = { animParams.position.x, animParams.position.y, animParams.position.z };
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat3("##Position", position, 0.1f, -100.0f, 100.0f, "%.1f"))
+                {
+                    ModelAnimationParams updatedParams = animParams;
+                    updatedParams.position = glm::vec3(position[0], position[1], position[2]);
+                    m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
+                }
+                
+                // Rotation controls
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("R:"); ImGui::SameLine();
+                float rotation[3] = { 
+                    glm::degrees(animParams.rotation.x), 
+                    glm::degrees(animParams.rotation.y), 
+                    glm::degrees(animParams.rotation.z) 
+                };
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat3("##Rotation", rotation, 1.0f, -180.0f, 180.0f, "%.0f°"))
+                {
+                    ModelAnimationParams updatedParams = animParams;
+                    updatedParams.rotation = glm::vec3(
+                        glm::radians(rotation[0]), 
+                        glm::radians(rotation[1]), 
+                        glm::radians(rotation[2])
+                    );
+                    m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
+                }
+                
+                // Scale controls
+                ImGui::AlignTextToFramePadding();
+                ImGui::Text("S:"); ImGui::SameLine();
+                float scale[3] = { animParams.scale.x, animParams.scale.y, animParams.scale.z };
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::DragFloat3("##Scale", scale, 0.01f, 0.01f, 10.0f, "%.2f"))
+                {
+                    ModelAnimationParams updatedParams = animParams;
+                    updatedParams.scale = glm::vec3(scale[0], scale[1], scale[2]);
+                    m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
+                }
+                
+                ImGui::Spacing();
+                
+                // Animation controls (simplified)
+                bool enableAnimation = animParams.enableAnimation;
+                if (ImGui::Checkbox("Auto Rotate", &enableAnimation))
+                {
+                    ModelAnimationParams updatedParams = animParams;
+                    updatedParams.enableAnimation = enableAnimation;
+                    updatedParams.rotationSpeed = enableAnimation ? 1.0f : 0.0f;
+                    updatedParams.rotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+                    m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
+                }
+                
+                if (animParams.enableAnimation)
+                {
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::Text("Speed:"); ImGui::SameLine();
+                    float rotationSpeed = animParams.rotationSpeed;
+                    ImGui::SetNextItemWidth(-1);
+                    if (ImGui::DragFloat("##Speed", &rotationSpeed, 0.1f, 0.0f, 5.0f, "%.1f"))
+                    {
+                        ModelAnimationParams updatedParams = animParams;
+                        updatedParams.rotationSpeed = rotationSpeed;
+                        m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
+                    }
+                }
+                
+                ImGui::Spacing();
+                
+                // Control buttons
+                if (ImGui::Button("Reset", ImVec2(-1, 0)))
+                {
+                    ModelAnimationParams resetParams = animParams;
+                    resetParams.position = glm::vec3(0.0f);
+                    resetParams.rotation = glm::vec3(0.0f);
+                    resetParams.scale = glm::vec3(1.0f);
+                    resetParams.enableAnimation = false;
+                    m_render_resource->updateRenderObjectAnimationParams(selected_model, resetParams);
+                }
+                
+                if (ImGui::Button("Save Config", ImVec2(-1, 0)))
+                {
+                    saveModelConfiguration();
+                }
+            }
+        }
+        else
+        {
+            ImGui::Text("No models available for transformation");
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Please ensure model files are loaded correctly");
         }
         
         ImGui::End();
         
-        // 显示ImGui演示窗口（可选）
-        static bool show_demo_window = false;
-        if (ImGui::Button("显示演示窗口"))
+        // Scene Objects Window (Compact)
+        ImGui::Begin("Scene", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+        
+        if (m_render_resource && !m_render_resource->getLoadedRenderObjects().empty())
         {
-            show_demo_window = !show_demo_window;
+            const auto& renderObjects = m_render_resource->getLoadedRenderObjects();
+            for (size_t i = 0; i < renderObjects.size(); ++i)
+            {
+                const auto& obj = renderObjects[i];
+                ImGui::Text("%zu. %s", i + 1, obj.name.c_str());
+            }
+        }
+        else
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No objects");
         }
         
-        if (show_demo_window)
+        ImGui::End();
+    }
+    
+    /**
+     * @brief 保存模型配置到JSON文件
+     */
+    void UIPass::saveModelConfiguration()
+    {
+        if (!m_render_resource)
         {
-            ImGui::ShowDemoWindow(&show_demo_window);
+            LOG_ERROR("[UIPass::saveModelConfiguration] Render resource not available");
+            return;
+        }
+        
+        const auto& renderObjects = m_render_resource->getLoadedRenderObjects();
+        if (renderObjects.empty())
+        {
+            LOG_WARN("[UIPass::saveModelConfiguration] No render objects to save");
+            return;
+        }
+        
+        // 构建JSON配置
+        json11::Json::object config;
+        json11::Json::array entities;
+        
+        for (size_t i = 0; i < renderObjects.size(); ++i)
+        {
+            const auto& obj = renderObjects[i];
+            json11::Json::object entity;
+            
+            entity["name"] = obj.name;
+            entity["model_path"] = obj.modelName;
+            entity["animation_params"] = obj.animationParams.toJson();
+            
+            // 添加纹理信息（如果需要）
+            json11::Json::array textures;
+            // 这里可以根据需要添加纹理路径信息
+            entity["textures"] = textures;
+            
+            entities.push_back(entity);
+        }
+        
+        config["entities"] = entities;
+        
+        // 将JSON写入文件
+        std::string json_string = json11::Json(config).dump();
+        std::string config_path = "engine/content/levels/model_config.json";
+        
+        std::ofstream config_file(config_path);
+        if (config_file.is_open())
+        {
+            config_file << json_string;
+            config_file.close();
+            // LOG_INFO("[UIPass::saveModelConfiguration] Model configuration saved to: {}", config_path);
+        }
+        else
+        {
+            LOG_ERROR("[UIPass::saveModelConfiguration] Failed to open config file: {}", config_path);
         }
     }
 
@@ -338,7 +566,40 @@ namespace Elish
             ImGui::DestroyContext();
             
             m_imgui_initialized = false;
-            LOG_INFO("[UIPass] ImGui resources cleaned up");
+            // LOG_INFO("[UIPass] ImGui resources cleaned up");
+        }
+    }
+
+    /**
+     * @brief 在子通道中渲染UI内容
+     * 专门用于在MainCameraPass的UI子通道中调用
+     * @param command_buffer 当前的命令缓冲区
+     */
+    void UIPass::drawInSubpass(RHICommandBuffer* command_buffer)
+    {
+        if (!m_imgui_initialized)
+        {
+            LOG_WARN("[UIPass] ImGui not initialized, skipping UI rendering in subpass");
+            return;
+        }
+
+        // 开始新的ImGui帧
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
+        // 渲染UI内容
+        renderUIContent();
+
+        // 结束ImGui帧并渲染
+        ImGui::Render();
+        ImDrawData* draw_data = ImGui::GetDrawData();
+        
+        if (draw_data && draw_data->CmdListsCount > 0)
+        {
+            // 在子通道中使用Vulkan命令缓冲区渲染ImGui
+            VkCommandBuffer vk_command_buffer = static_cast<VulkanCommandBuffer*>(command_buffer)->getResource();
+            ImGui_ImplVulkan_RenderDrawData(draw_data, vk_command_buffer);
         }
     }
 

@@ -38,9 +38,8 @@ namespace Elish
         // 相机系统
         std::shared_ptr<RenderCamera> m_camera;
         
-        // Uniform Buffer MVP相关
+        // Uniform Buffer VP相关 (View-Projection, model矩阵通过Push Constants传递)
         struct UniformBufferObject {
-            glm::mat4 model;
             glm::mat4 view;
             glm::mat4 proj;
         };
@@ -117,6 +116,7 @@ namespace Elish
         // 私有方法 - 绘制相关
         void drawBackground(RHICommandBuffer* command_buffer);
         void drawModels(RHICommandBuffer* command_buffer);
+        void drawUI(RHICommandBuffer* command_buffer);
         void updateUniformBuffer(uint32_t currentFrameIndex);
          
         // 静态方法 - 顶点输入描述

@@ -82,6 +82,28 @@ namespace Elish
         m_RenderObjects.push_back(renderObject);
     }
     
+    /**
+     * @brief 更新指定渲染对象的动画参数
+     * @param objectIndex 渲染对象的索引
+     * @param newParams 新的动画参数
+     * @return 更新是否成功
+     */
+    bool RenderResource::updateRenderObjectAnimationParams(size_t objectIndex, const ModelAnimationParams& newParams)
+    {
+        if (objectIndex >= m_RenderObjects.size()) {
+            LOG_ERROR("[RenderResource::updateRenderObjectAnimationParams] Invalid object index: {}", objectIndex);
+            return false;
+        }
+        
+        // 更新动画参数
+        m_RenderObjects[objectIndex].animationParams = newParams;
+        
+        // LOG_INFO("[RenderResource::updateRenderObjectAnimationParams] Updated animation params for object {} ({})", 
+                 // objectIndex, m_RenderObjects[objectIndex].name);
+        
+        return true;
+    }
+    
     bool RenderResource::createRenderObjectResource(RenderObject& outRenderObject, const std::string& objfile, const std::vector<std::string>& pngfiles)
     {
         
@@ -590,15 +612,21 @@ namespace Elish
             return false;
         }
         
-        // Create pipeline layout
+        // Create pipeline layout with Push Constants support
         RHIDescriptorSetLayout* descriptorSetLayouts[] = {m_modelPipelineResource.descriptorSetLayout};
+        
+        // 配置Push Constants范围 - 用于传递model矩阵
+        RHIPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = RHI_SHADER_STAGE_VERTEX_BIT;  // 顶点着色器阶段
+        pushConstantRange.offset = 0;                               // 偏移量为0
+        pushConstantRange.size = sizeof(glm::mat4);                 // model矩阵大小(64字节)
         
         RHIPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = RHI_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
-        pipelineLayoutInfo.pushConstantRangeCount = 0; 
-        pipelineLayoutInfo.pPushConstantRanges = nullptr;
+        pipelineLayoutInfo.pushConstantRangeCount = 1;              // 启用Push Constants
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange; // 设置Push Constants范围
         
         if (m_rhi->createPipelineLayout(&pipelineLayoutInfo, m_modelPipelineResource.pipelineLayout) != RHI_SUCCESS) {
             LOG_ERROR("[RenderResource::createModelPipelineResource] Failed to create pipeline layout");
@@ -771,5 +799,68 @@ namespace Elish
         return true;
     }
 
+    // ModelAnimationParams序列化方法实现
+    json11::Json ModelAnimationParams::toJson() const {
+        return json11::Json::object {
+            {"position", json11::Json::array {position.x, position.y, position.z}},
+            {"rotation", json11::Json::array {rotation.x, rotation.y, rotation.z}},
+            {"scale", json11::Json::array {scale.x, scale.y, scale.z}},
+            {"rotationAxis", json11::Json::array {rotationAxis.x, rotationAxis.y, rotationAxis.z}},
+            {"rotationSpeed", rotationSpeed},
+            {"enableAnimation", enableAnimation},
+            {"isPlatform", isPlatform}
+        };
+    }
+
+    bool ModelAnimationParams::fromJson(const json11::Json& json) {
+        if (!json.is_object()) {
+            return false;
+        }
+
+        // 解析position
+        auto pos_json = json["position"];
+        if (pos_json.is_array() && pos_json.array_items().size() == 3) {
+            position.x = static_cast<float>(pos_json[0].number_value());
+            position.y = static_cast<float>(pos_json[1].number_value());
+            position.z = static_cast<float>(pos_json[2].number_value());
+        }
+
+        // 解析rotation
+        auto rot_json = json["rotation"];
+        if (rot_json.is_array() && rot_json.array_items().size() == 3) {
+            rotation.x = static_cast<float>(rot_json[0].number_value());
+            rotation.y = static_cast<float>(rot_json[1].number_value());
+            rotation.z = static_cast<float>(rot_json[2].number_value());
+        }
+
+        // 解析scale
+        auto scale_json = json["scale"];
+        if (scale_json.is_array() && scale_json.array_items().size() == 3) {
+            scale.x = static_cast<float>(scale_json[0].number_value());
+            scale.y = static_cast<float>(scale_json[1].number_value());
+            scale.z = static_cast<float>(scale_json[2].number_value());
+        }
+
+        // 解析rotationAxis
+        auto axis_json = json["rotationAxis"];
+        if (axis_json.is_array() && axis_json.array_items().size() == 3) {
+            rotationAxis.x = static_cast<float>(axis_json[0].number_value());
+            rotationAxis.y = static_cast<float>(axis_json[1].number_value());
+            rotationAxis.z = static_cast<float>(axis_json[2].number_value());
+        }
+
+        // 解析其他参数
+        if (json["rotationSpeed"].is_number()) {
+            rotationSpeed = static_cast<float>(json["rotationSpeed"].number_value());
+        }
+        if (json["enableAnimation"].is_bool()) {
+            enableAnimation = json["enableAnimation"].bool_value();
+        }
+        if (json["isPlatform"].is_bool()) {
+            isPlatform = json["isPlatform"].bool_value();
+        }
+
+        return true;
+    }
 
 } // namespace Elish

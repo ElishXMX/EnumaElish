@@ -27,6 +27,11 @@ namespace Elish
     {
     public:
         /**
+         * @brief 构造函数
+         */
+        UIPass();
+
+        /**
          * @brief 析构函数
          * 负责清理ImGui相关资源
          */
@@ -49,6 +54,13 @@ namespace Elish
          * @param command_buffer 当前的命令缓冲区
          */
         void draw(RHICommandBuffer* command_buffer);
+
+        /**
+         * @brief 在子通道中渲染UI内容
+         * 专门用于在MainCameraPass的UI子通道中调用
+         * @param command_buffer 当前的命令缓冲区
+         */
+        void drawInSubpass(RHICommandBuffer* command_buffer);
 
     private:
         /**
@@ -77,6 +89,11 @@ namespace Elish
          * 显示基础文本用于功能验证
          */
         void renderUIContent();
+        
+        /**
+         * @brief 保存模型配置到JSON文件
+         */
+        void saveModelConfiguration();
 
         /**
          * @brief 获取主相机渲染通道

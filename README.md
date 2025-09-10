@@ -2,7 +2,7 @@
 ![EnumaElish Logo](LOGO.png)
 
 ## 项目概述
-EnumaElish 是一个基于Vulkan的现代3D游戏引擎，采用C++20开发，支持跨平台渲染和实时图形处理。
+EnumaElish 是一个基于Vulkan的3D渲染引擎，采用C++20开发，支持跨平台渲染和实时图形处理。
 参考Piccolo引擎的引擎架构进行开发
 
 ## 当前实现功能
@@ -31,7 +31,7 @@ cd EnumaElish
 mkdir build-ninja
 cd build-ninja
 cmake .. -G Ninja
-cmake --build .
+ninja
 
 EnumaElish.exe
 ```
