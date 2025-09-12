@@ -5,6 +5,14 @@
 #include "../render_resource.h"
 #include "../render_camera.h"
 
+// Vector3类型别名定义
+using Vector3 = glm::vec3;
+
+namespace Elish
+{
+    class DirectionalLightShadowPass; // 前向声明
+}
+
 
 namespace Elish
 {
@@ -23,11 +31,43 @@ namespace Elish
         void setupDescriptorSetLayout();
         void setupPipelines();
         void setupBackgroundDescriptorSet();
+        void setupSkyboxDescriptorSet();  // 新增：天空盒描述符集设置
         void setupModelDescriptorSet();
         void setupFramebufferDescriptorSet();
         void setupSwapchainFramebuffers();
 
         void updateAfterFramebufferRecreate();
+        
+        // 设置阴影渲染pass引用
+        void setDirectionalLightShadowPass(std::shared_ptr<DirectionalLightShadowPass> shadow_pass) { m_directional_light_shadow_pass = shadow_pass; }
+        
+        // 光源管理系统接口（已移除，现在使用 RenderResource 管理光源）
+        
+        /**
+         * @brief 设置背景绘制启用状态
+         * @param enabled 是否启用背景绘制
+         */
+        void setBackgroundEnabled(bool enabled);
+        
+        /**
+         * @brief 获取背景绘制启用状态
+         * @return 背景绘制是否启用
+         */
+        bool isBackgroundEnabled() const;
+        
+        /**
+         * @brief 设置天空盒绘制启用状态
+         * @param enabled 是否启用天空盒绘制
+         */
+        void setSkyboxEnabled(bool enabled);
+        
+        /**
+         * @brief 获取天空盒绘制启用状态
+         * @return 天空盒绘制是否启用
+         */
+        bool isSkyboxEnabled() const;
+        
+        // 旧的兼容性接口已移除，现在使用 RenderResource 管理光源
 
         
 
@@ -37,6 +77,14 @@ namespace Elish
         
         // 相机系统
         std::shared_ptr<RenderCamera> m_camera;
+        
+        // 阴影渲染pass引用
+        std::shared_ptr<DirectionalLightShadowPass> m_directional_light_shadow_pass;
+        
+        // 光源管理系统（已移除，现在使用 RenderResource 管理光源）
+        
+        // 兼容性光源位置（用于回退模式）
+        Vector3 m_fallback_light_position = Vector3(0.0f, 0.0f, 3.0f);
         
         // Uniform Buffer VP相关 (View-Projection, model矩阵通过Push Constants传递)
         struct UniformBufferObject {
@@ -48,6 +96,8 @@ namespace Elish
         std::vector<RHIDeviceMemory*> uniformBuffersMemory;     // 每个uniform buffer对应的内存地址
         std::vector<RHIBuffer*> viewUniformBuffers;                 // 为每个飞行中的帧创建的统一缓存区
         std::vector<RHIDeviceMemory*> viewUniformBuffersMemory;     // 每个uniform buffer对应的内存地址
+        std::vector<RHIBuffer*> lightSpaceMatrixBuffers;            // 光源投影视图矩阵uniform buffer
+        std::vector<RHIDeviceMemory*> lightSpaceMatrixBuffersMemory; // 光源投影视图矩阵buffer内存
 
         struct Light
         {
@@ -89,7 +139,14 @@ namespace Elish
         int m_background_image_width = 0;
         int m_background_image_height = 0;
         
-        uint32_t layout_size = 8;//定义模型的描述符集布局大小，即需要几个绑定点  五张纹理，一张cubmap，两个缓冲区
+        // 天空盒渲染相关资源
+        bool m_enable_background = false;  // 背景绘制开关（用于UI控制）
+        bool m_enable_skybox = true;  // 天空盒渲染开关（用于UI控制）
+        bool m_skybox_descriptor_sets_initialized = false;  // 天空盒描述符集初始化标志
+        std::vector<RHIDescriptorSet*> m_skybox_descriptor_sets;  // 天空盒渲染描述符集
+        RHIDescriptorSetLayout* m_skybox_descriptor_layout = nullptr;  // 天空盒专用描述符布局
+        
+        uint32_t layout_size = 10;//定义模型的描述符集布局大小，即需要几个绑定点  五张纹理，一张cubmap，三个缓冲区，一张阴影贴图
         // Render resource
         std::shared_ptr<RenderResource> m_render_resource = nullptr;
         
@@ -115,6 +172,7 @@ namespace Elish
         
         // 私有方法 - 绘制相关
         void drawBackground(RHICommandBuffer* command_buffer);
+        void drawSkybox(RHICommandBuffer* command_buffer);  // 新增：天空盒绘制方法
         void drawModels(RHICommandBuffer* command_buffer);
         void drawUI(RHICommandBuffer* command_buffer);
         void updateUniformBuffer(uint32_t currentFrameIndex);

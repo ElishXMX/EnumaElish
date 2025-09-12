@@ -3,6 +3,7 @@
 #include "passes/main_camera_pass.h"
 #include "passes/ui_pass.h"
 #include "passes/directional_light_pass.h"
+#include "passes/raytracing_pass.h"
 #include "render_pass_base.h"
 #include "../core/base/macro.h"
 #include <iostream>
@@ -26,11 +27,20 @@ namespace Elish
         m_main_camera_pass = std::make_shared<MainCameraPass>();
         m_main_camera_pass->setCommonInfo(pass_common_info);
         m_main_camera_pass->initialize();
+        
+        // 设置MainCameraPass对DirectionalLightShadowPass的引用
+        auto main_camera_pass = std::static_pointer_cast<MainCameraPass>(m_main_camera_pass);
+        main_camera_pass->setDirectionalLightShadowPass(std::static_pointer_cast<DirectionalLightShadowPass>(m_directional_light_shadow_pass));
 
         // 初始化UI渲染通道
         m_ui_pass = std::make_shared<UIPass>();
         m_ui_pass->setCommonInfo(pass_common_info);
         m_ui_pass->initialize();
+        
+        // 初始化光线追踪渲染通道
+        m_raytracing_pass = std::make_shared<RayTracingPass>();
+        m_raytracing_pass->setCommonInfo(pass_common_info);
+        m_raytracing_pass->initialize();
     }
     void RenderPipeline::forwardRender(std::shared_ptr<RHI> rhi, std::shared_ptr<RenderResource> render_resource)
     {
@@ -65,7 +75,14 @@ namespace Elish
         ->draw();
         // LOG_INFO("[RenderPipeline] DirectionalLightShadowPass::draw() completed");
 
-        // 2. 执行主相机渲染通道（包含UI子通道，使用阴影贴图）
+        // 2. 执行光线追踪渲染通道（如果启用）
+        if (m_raytracing_pass && m_raytracing_pass->isRayTracingEnabled())
+        {
+            m_raytracing_pass->preparePassData(render_resource);
+            m_raytracing_pass->drawRayTracing(vulkan_rhi->m_current_swapchain_image_index);
+        }
+        
+        // 3. 执行主相机渲染通道（包含UI子通道，使用阴影贴图）
         static_cast<MainCameraPass*>(m_main_camera_pass.get())
         ->drawForward(vulkan_rhi->m_current_swapchain_image_index);  // 传递当前交换链图像索引（多缓冲渲染）
         
@@ -85,6 +102,35 @@ namespace Elish
         // 更新主相机渲染通道
         MainCameraPass& main_camera_pass = *(static_cast<MainCameraPass*>(m_main_camera_pass.get()));
         main_camera_pass.updateAfterFramebufferRecreate();
+        
+        // 更新光线追踪渲染通道
+        if (m_raytracing_pass)
+        {
+            m_raytracing_pass->updateAfterFramebufferRecreate();
+        }
+    }
+    
+    /**
+     * @brief 启用或禁用光线追踪
+     */
+    void RenderPipeline::setRayTracingEnabled(bool enabled)
+    {
+        if (m_raytracing_pass)
+        {
+            m_raytracing_pass->setRayTracingEnabled(enabled);
+        }
+    }
+    
+    /**
+     * @brief 获取光线追踪启用状态
+     */
+    bool RenderPipeline::isRayTracingEnabled() const
+    {
+        if (m_raytracing_pass)
+        {
+            return m_raytracing_pass->isRayTracingEnabled();
+        }
+        return false;
     }
 
 }

@@ -6,6 +6,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <array>
 #include <unordered_map>
 #include <glm/glm.hpp>
 
@@ -14,6 +15,7 @@
 // 将哈希函数定义移到Elish命名空间内，避免扩展std命名空间
 namespace Elish {
     class RHI;
+    class RenderCamera;
     
     struct Vertex {
 	glm::vec3 pos;
@@ -141,7 +143,7 @@ namespace Elish {
         glm::vec3 scale = glm::vec3(1.0f);          // 缩放比例
         glm::vec3 rotationAxis = glm::vec3(1.0f, 0.0f, 0.0f);  // 旋转轴
         float rotationSpeed = 1.0f;                 // 旋转速度倍数
-        bool enableAnimation = true;                // 是否启用动画
+        bool enableAnimation = false;               // 是否启用动画（默认禁用，保持静止）
         bool isPlatform = false;                    // 是否为平台（保持静止）
         
         /**
@@ -191,11 +193,87 @@ namespace Elish {
 		RHIPipelineLayout* pipelineLayout;            // 渲染管线布局
 		RHIPipeline* graphicsPipeline;                // 渲染管线
 	};
+
+    /**
+     * @brief 光线追踪管线资源结构
+     * @details 包含光线追踪所需的所有资源，包括描述符集布局、管线布局和光线追踪管线
+     */
+    struct RayTracingPipelineResource {
+        RHIDescriptorSetLayout* descriptorSetLayout;  // 光线追踪描述符集布局
+        RHIPipelineLayout* pipelineLayout;            // 光线追踪管线布局
+        RHIPipeline* rayTracingPipeline;              // 光线追踪管线
+        RHIBuffer* shaderBindingTable;                // 着色器绑定表
+        VmaAllocation shaderBindingTableAllocation;   // 着色器绑定表内存分配
+    };
+
+    /**
+     * @brief 光线追踪资源结构
+     * @details 包含光线追踪所需的加速结构和相关资源
+     */
+    struct RayTracingResource {
+        RHIAccelerationStructure* topLevelAS;         // 顶层加速结构（TLAS）
+        RHIBuffer* topLevelASBuffer;                  // TLAS缓冲区
+        VmaAllocation topLevelASAllocation;           // TLAS内存分配
+        
+        std::vector<RHIAccelerationStructure*> bottomLevelAS;  // 底层加速结构数组（BLAS）
+        std::vector<RHIBuffer*> bottomLevelASBuffers;          // BLAS缓冲区数组
+        std::vector<VmaAllocation> bottomLevelASAllocations;   // BLAS内存分配数组
+        
+        RHIBuffer* instanceBuffer;                    // 实例缓冲区
+        VmaAllocation instanceAllocation;             // 实例缓冲区内存分配
+        
+        RHIImage* rayTracingOutputImage;             // 光线追踪输出图像
+        RHIImageView* rayTracingOutputImageView;     // 光线追踪输出图像视图
+        VmaAllocation rayTracingOutputImageAllocation; // 输出图像内存分配
+        
+        // 兼容性成员变量（用于raytracing_pass.cpp）
+        RHIAccelerationStructure* tlas;              // TLAS别名，指向topLevelAS
+        RHIBuffer* vertex_buffer;                     // 顶点缓冲区
+        RHIBuffer* index_buffer;                      // 索引缓冲区
+    };
     /** 全局常量*/
     struct GlobalConstants {
         float time;
         float roughness;
         float metallic;
+    };
+
+    /**
+     * @brief GPU光源数据结构
+     * 用于传递给着色器的光源数据格式
+     */
+    struct LightGPUData {
+        glm::vec4 position;    // 位置（w=0表示方向光，w=1表示点光源）
+        glm::vec4 color;       // 颜色和强度（rgb=颜色，a=强度）
+        glm::vec4 direction;   // 方向（归一化）
+        glm::vec4 info;        // 附加信息（x=是否投射阴影，y=阴影偏移，z,w=保留）
+    };
+
+    /**
+     * @brief 方向光源数据结构
+     * @details 存储方向光源的所有参数，用于统一管理和GPU数据传输
+     */
+    struct DirectionalLightData {
+        glm::vec3 direction = glm::vec3(0.0f, -1.0f, 0.0f);  // 光源方向（归一化）
+        float intensity = 1.0f;                              // 光源强度
+        glm::vec3 color = glm::vec3(1.0f, 1.0f, 1.0f);      // 光源颜色
+        float distance = 10.0f;                              // 光源距离（用于阴影贴图投影）
+        bool cast_shadows = true;                             // 是否投射阴影
+        float shadow_bias = 0.005f;                          // 阴影偏移
+        bool enabled = true;                                  // 是否启用
+        
+        /**
+         * @brief 转换为GPU数据格式
+         * @return LightGPUData结构
+         */
+        LightGPUData toGPUData() const {
+            LightGPUData gpu_data;
+            gpu_data.position = glm::vec4(0.0f, 0.0f, 0.0f, 0.0f); // w=0表示方向光
+            gpu_data.color = glm::vec4(color * intensity, 1.0f);
+            gpu_data.direction = glm::vec4(glm::normalize(direction), 0.0f);
+            gpu_data.info = glm::vec4(cast_shadows ? 1.0f : 0.0f, shadow_bias, 0.0f, 0.0f);
+            return gpu_data;
+        }
     };
     /**
      * @brief 渲染资源管理类，负责管理模型数据和相关的渲染资源
@@ -238,6 +316,11 @@ namespace Elish {
          * @param renderObject 要添加的渲染对象
          */
         void addRenderObject(const RenderObject& renderObject);
+        
+        /**
+         * @brief 清空所有渲染对象
+         */
+        void clearAllRenderObjects();
         
         /**
          * @brief 更新指定渲染对象的动画参数
@@ -295,6 +378,174 @@ namespace Elish {
          */
         RHISampler* getCubemapImageSampler()  { return cubemapSampler; }
 
+        /**
+         * @brief Gets the directional light shadow map image view.
+         * @return Pointer to the RHIImageView object for the shadow map.
+         */
+        RHIImageView* getDirectionalLightShadowImageView() { return m_directionalLightShadowImageView; }
+        
+        /**
+         * @brief Gets the directional light shadow map image sampler.
+         * @return Pointer to the RHISampler object for the shadow map.
+         */
+        RHISampler* getDirectionalLightShadowImageSampler() { return m_directionalLightShadowSampler; }
+        
+        /**
+         * @brief Sets the directional light shadow map resources.
+         * @param shadowImageView The shadow map image view from shadow pass.
+         * @param shadowSampler The shadow map sampler from shadow pass.
+         */
+        void setDirectionalLightShadowResources(RHIImageView* shadowImageView, RHISampler* shadowSampler) {
+            m_directionalLightShadowImageView = shadowImageView;
+            m_directionalLightShadowSampler = shadowSampler;
+        }
+        
+        // ========================================================================
+        // 方向光源管理接口
+        // ========================================================================
+        
+        /**
+         * @brief 添加方向光源
+         * @param lightData 光源数据
+         * @return 光源索引
+         */
+        size_t addDirectionalLight(const DirectionalLightData& lightData);
+        
+        /**
+         * @brief 更新方向光源
+         * @param index 光源索引
+         * @param lightData 新的光源数据
+         * @return 成功返回true
+         */
+        bool updateDirectionalLight(size_t index, const DirectionalLightData& lightData);
+        
+        /**
+         * @brief 移除方向光源
+         * @param index 光源索引
+         * @return 成功返回true
+         */
+        bool removeDirectionalLight(size_t index);
+        
+        /**
+         * @brief 获取方向光源数据
+         * @param index 光源索引
+         * @return 光源数据指针，无效索引返回nullptr
+         */
+        const DirectionalLightData* getDirectionalLight(size_t index) const;
+        
+        /**
+         * @brief 获取所有方向光源数据
+         * @return 光源数据数组
+         */
+        const std::vector<DirectionalLightData>& getDirectionalLights() const { return m_directionalLights; }
+        
+        /**
+         * @brief 获取方向光源数量
+         * @return 光源数量
+         */
+        size_t getDirectionalLightCount() const { return m_directionalLights.size(); }
+        
+        /**
+         * @brief 清空所有方向光源
+         */
+        void clearDirectionalLights();
+        
+        /**
+         * @brief 获取主要方向光源（第一个启用的光源）
+         * @return 光源数据指针，无光源返回nullptr
+         */
+        const DirectionalLightData* getPrimaryDirectionalLight() const;
+        
+        /**
+         * @brief 更新主要方向光源的方向
+         * @param direction 新的光源方向
+         * @return 更新是否成功
+         */
+        bool updateDirectionalLightDirection(const glm::vec3& direction);
+        
+        /**
+         * @brief 更新主要方向光源的强度
+         * @param intensity 新的光源强度
+         * @return 更新是否成功
+         */
+        bool updateDirectionalLightIntensity(float intensity);
+        
+        /**
+         * @brief 更新方向光源颜色
+         * @param color 新的光源颜色
+         * @return 更新是否成功
+         */
+        bool updateDirectionalLightColor(const glm::vec3& color);
+        
+        /**
+         * @brief 更新方向光距离
+         * @param distance 新的距离值
+         * @return 更新是否成功
+         */
+        bool updateDirectionalLightDistance(float distance);
+        
+        // 光线追踪相关方法
+        /**
+         * @brief 创建光线追踪管线资源
+         * @return 创建是否成功
+         */
+        bool createRayTracingPipelineResource();
+        
+        /**
+         * @brief 创建光线追踪资源（加速结构等）
+         * @return 创建是否成功
+         */
+        bool createRayTracingResource();
+        
+        /**
+         * @brief 获取光线追踪管线资源
+         * @return 光线追踪管线资源的常量引用
+         */
+        const RayTracingPipelineResource& getRayTracingPipelineResource() const {
+            return m_rayTracingPipelineResource;
+        }
+        
+        /**
+         * @brief 获取光线追踪资源
+         * @return 光线追踪资源的常量引用
+         */
+        const RayTracingResource& getRayTracingResource() const {
+            return m_rayTracingResource;
+        }
+        
+        /**
+         * @brief 检查光线追踪管线资源是否已创建
+         * @return 如果已创建返回true，否则返回false
+         */
+        bool isRayTracingPipelineResourceCreated() const {
+            return m_rayTracingPipelineResourceCreated;
+        }
+        
+        /**
+         * @brief 检查光线追踪资源是否已创建
+         * @return 如果已创建返回true，否则返回false
+         */
+        bool isRayTracingResourceCreated() const {
+            return m_rayTracingResourceCreated;
+        }
+        
+        /**
+         * @brief 更新光线追踪加速结构
+         * @return 成功返回true，失败返回false
+         */
+        bool updateRayTracingAccelerationStructures();
+        
+        /**
+         * @brief 获取相机对象
+         * @return 相机对象指针，如果未设置则返回nullptr
+         */
+        class RenderCamera* getCamera() const { return m_camera; }
+        
+        /**
+         * @brief 设置相机对象
+         * @param camera 相机对象指针
+         */
+        void setCamera(class RenderCamera* camera) { m_camera = camera; }
         
         
     private:
@@ -303,12 +554,26 @@ namespace Elish {
         std::vector<RenderObject> m_RenderObjects;               ///< 存储加载的模型
         RenderPipelineResource m_modelPipelineResource;          ///< 模型渲染管线资源
         bool m_modelPipelineResourceCreated = false;             ///< 模型渲染管线资源是否已创建
+        
+        class RenderCamera* m_camera = nullptr;                 ///< 相机对象指针
 
         RHIImage* m_cubemapImage;
         RHIImageView* m_cubemapImageView;
         RHISampler* cubemapSampler;		
         VmaAllocation m_cubemapImageAllocation;
+        
+        // 阴影相关资源
+        RHIImageView* m_directionalLightShadowImageView = nullptr;
+        RHISampler* m_directionalLightShadowSampler = nullptr;
+        
+        // 方向光源数据
+        std::vector<DirectionalLightData> m_directionalLights;  ///< 方向光源数组
 
+        // 光线追踪资源管理
+        RayTracingPipelineResource m_rayTracingPipelineResource;    ///< 光线追踪管线资源
+        RayTracingResource m_rayTracingResource;                    ///< 光线追踪资源（加速结构等）
+        bool m_rayTracingPipelineResourceCreated = false;          ///< 光线追踪管线资源是否已创建
+        bool m_rayTracingResourceCreated = false;                   ///< 光线追踪资源是否已创建
         
         /**
          * @brief 加载OBJ模型文件

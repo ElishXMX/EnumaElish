@@ -34,6 +34,7 @@ namespace Elish
     class RHISampler { };
     class RHISemaphore { };
     class RHIShader { };
+    class RHIAccelerationStructure { };
 
 
     ////////////////////struct//////////////////////////
@@ -446,6 +447,228 @@ namespace Elish
         RHIPipelineLayout* layout;
         RHIPipeline* basePipelineHandle;
         int32_t basePipelineIndex;
+    };
+
+    /**
+     * @brief 光线追踪着色器组创建信息
+     * @details 定义光线追踪管线中的着色器组，包括raygen、miss、closesthit等着色器类型
+     */
+    struct RHIRayTracingShaderGroupCreateInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIRayTracingShaderGroupTypeKHR type;           // 着色器组类型
+        uint32_t generalShader;                         // 通用着色器索引（raygen/miss）
+        uint32_t closestHitShader;                      // 最近命中着色器索引
+        uint32_t anyHitShader;                          // 任意命中着色器索引
+        uint32_t intersectionShader;                    // 相交着色器索引
+        const void* pShaderGroupCaptureReplayHandle;   // 着色器组捕获重放句柄
+    };
+
+    /**
+     * @brief 光线追踪管线库创建信息
+     * @details 用于创建可重用的光线追踪管线库
+     */
+    struct RHIPipelineLibraryCreateInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        uint32_t libraryCount;
+        const RHIPipeline* pLibraries;
+    };
+
+    /**
+     * @brief 光线追踪管线接口创建信息
+     * @details 定义光线追踪管线的接口参数
+     */
+    struct RHIRayTracingPipelineInterfaceCreateInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        uint32_t maxPipelineRayPayloadSize;      // 最大光线载荷大小
+        uint32_t maxPipelineRayHitAttributeSize; // 最大光线命中属性大小
+    };
+
+    /**
+     * @brief 光线追踪管线创建信息
+     * @details 定义创建光线追踪管线所需的所有参数
+     */
+    struct RHIRayTracingPipelineCreateInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIPipelineCreateFlags flags;
+        uint32_t stageCount;                                        // 着色器阶段数量
+        const RHIPipelineShaderStageCreateInfo* pStages;          // 着色器阶段数组
+        uint32_t groupCount;                                        // 着色器组数量
+        const RHIRayTracingShaderGroupCreateInfo* pGroups;        // 着色器组数组
+        uint32_t maxPipelineRayRecursionDepth;                    // 最大光线递归深度
+        const RHIPipelineLibraryCreateInfo* pLibraryInfo;         // 管线库信息
+        const RHIRayTracingPipelineInterfaceCreateInfo* pLibraryInterface; // 管线接口信息
+        const RHIPipelineDynamicStateCreateInfo* pDynamicState;   // 动态状态
+        RHIPipelineLayout* layout;                                  // 管线布局
+        RHIPipeline* basePipelineHandle;                           // 基础管线句柄
+        int32_t basePipelineIndex;                                 // 基础管线索引
+    };
+
+
+
+    // 光线追踪加速结构相关结构体
+    
+    // 设备或主机地址联合体
+    union RHIDeviceOrHostAddress
+    {
+        RHIDeviceAddress deviceAddress;
+        void* hostAddress;
+    };
+    
+    // 光线追踪几何数据结构体
+    struct RHIAccelerationStructureGeometry
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIGeometryTypeKHR geometryType;
+        RHIGeometryFlagBitsKHR flags;
+        union {
+            struct {
+                RHIDeviceOrHostAddress vertexData;
+                RHIDeviceSize vertexStride;
+                uint32_t maxVertex;
+                RHIFormat vertexFormat;
+                RHIDeviceOrHostAddress indexData;
+                RHIIndexType indexType;
+                RHIDeviceOrHostAddress transformData;
+            } triangles;
+            struct {
+                RHIDeviceOrHostAddress data;
+                RHIDeviceSize stride;
+            } aabbs;
+            struct {
+                RHIBool32 arrayOfPointers;
+                RHIDeviceOrHostAddress data;
+            } instances;
+        };
+    };
+    
+    struct RHIWriteDescriptorSetAccelerationStructureKHR
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        uint32_t accelerationStructureCount;
+        const RHIAccelerationStructure* const* pAccelerationStructures;
+    };
+    
+    struct RHIAccelerationStructureCreateInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIBuffer* buffer;
+        RHIDeviceSize offset;
+        RHIDeviceSize size;
+        RHIAccelerationStructureTypeKHR type;
+        RHIDeviceAddress deviceAddress;
+    };
+
+    struct RHIAccelerationStructureBuildInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIAccelerationStructureTypeKHR type;
+        RHIBuildAccelerationStructureFlagsKHR flags;
+        RHIBuildAccelerationStructureModeKHR mode;
+        RHIAccelerationStructure* srcAccelerationStructure;
+        RHIAccelerationStructure* dstAccelerationStructure;
+        uint32_t geometryCount;
+        const RHIAccelerationStructureGeometry* pGeometries;
+        const RHIAccelerationStructureGeometry* const* ppGeometries;
+        RHIDeviceOrHostAddress scratchData;
+    };
+
+    struct RHIAccelerationStructureDeviceAddressInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIAccelerationStructure* accelerationStructure;
+    };
+
+    // 光线追踪加速结构实例
+    struct RHIAccelerationStructureInstanceKHR
+    {
+        float transform[3][4];                          // 变换矩阵
+        uint32_t instanceCustomIndex : 24;              // 自定义实例索引
+        uint32_t mask : 8;                              // 实例掩码
+        uint32_t instanceShaderBindingTableRecordOffset : 24; // 着色器绑定表记录偏移
+        RHIGeometryInstanceFlagsKHR flags : 8;          // 几何实例标志
+        RHIDeviceAddress accelerationStructureReference; // 加速结构引用
+    };
+
+    // 光线追踪加速结构构建几何信息
+    struct RHIAccelerationStructureBuildGeometryInfoKHR
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIAccelerationStructureTypeKHR type;
+        RHIBuildAccelerationStructureFlagsKHR flags;
+        RHIBuildAccelerationStructureModeKHR mode;
+        RHIAccelerationStructure* srcAccelerationStructure;
+        RHIAccelerationStructure* dstAccelerationStructure;
+        uint32_t geometryCount;
+        const RHIAccelerationStructureGeometry* pGeometries;
+        const RHIAccelerationStructureGeometry* const* ppGeometries;
+        RHIDeviceOrHostAddress scratchData;
+    };
+
+    // 光线追踪加速结构构建范围信息
+    struct RHIAccelerationStructureBuildRangeInfoKHR
+    {
+        uint32_t primitiveCount;      // 图元数量
+        uint32_t primitiveOffset;     // 图元偏移
+        uint32_t firstVertex;         // 第一个顶点
+        uint32_t transformOffset;     // 变换偏移
+    };
+
+    // 光线追踪加速结构构建大小信息
+    struct RHIAccelerationStructureBuildSizesInfoKHR
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIDeviceSize accelerationStructureSize;  // 加速结构大小
+        RHIDeviceSize updateScratchSize;          // 更新临时缓冲区大小
+        RHIDeviceSize buildScratchSize;           // 构建临时缓冲区大小
+    };
+
+    // 着色器绑定表相关结构体
+    struct RHIShaderBindingTableCreateInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        uint32_t raygenShaderCount;
+        uint32_t missShaderCount;
+        uint32_t hitShaderCount;
+        uint32_t callableShaderCount;
+        RHIDeviceSize shaderGroupHandleSize;
+        RHIDeviceSize shaderGroupBaseAlignment;
+    };
+
+    struct RHITraceRaysInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIDeviceAddress raygenShaderBindingTableAddress;
+        RHIDeviceSize raygenShaderBindingTableSize;
+        RHIDeviceSize raygenShaderBindingTableStride;
+        RHIDeviceAddress missShaderBindingTableAddress;
+        RHIDeviceSize missShaderBindingTableSize;
+        RHIDeviceSize missShaderBindingTableStride;
+        RHIDeviceAddress hitShaderBindingTableAddress;
+        RHIDeviceSize hitShaderBindingTableSize;
+        RHIDeviceSize hitShaderBindingTableStride;
+        RHIDeviceAddress callableShaderBindingTableAddress;
+        RHIDeviceSize callableShaderBindingTableSize;
+        RHIDeviceSize callableShaderBindingTableStride;
+        uint32_t width;
+        uint32_t height;
+        uint32_t depth;
     };
 
     struct RHIImageBlit

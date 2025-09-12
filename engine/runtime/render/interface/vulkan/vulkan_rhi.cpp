@@ -527,9 +527,6 @@ namespace Elish
             return;
         }
 
-        VkSemaphore semaphores[2] = { ((VulkanSemaphore*)m_image_available_for_texturescopy_semaphores[m_current_frame_index])->getResource(),
-                                     m_image_finished_for_presentation_semaphores[m_current_frame_index] };
-
         // submit command buffer
         VkPipelineStageFlags wait_stages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
         VkSubmitInfo         submit_info   = {};
@@ -539,8 +536,8 @@ namespace Elish
         submit_info.pWaitDstStageMask      = wait_stages;
         submit_info.commandBufferCount     = 1;
         submit_info.pCommandBuffers        = &m_vk_command_buffers[m_current_frame_index];
-        submit_info.signalSemaphoreCount = 2;
-        submit_info.pSignalSemaphores = semaphores;
+        submit_info.signalSemaphoreCount   = 1;
+        submit_info.pSignalSemaphores      = &m_image_finished_for_presentation_semaphores[m_current_frame_index];
 
 
 
@@ -859,6 +856,53 @@ namespace Elish
             queue_create_infos.push_back(queue_create_info);
         }
 
+        // 查询光线追踪相关特性和属性
+        m_rt_pipeline_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+        m_rt_pipeline_features.pNext = nullptr;
+        
+        m_as_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+        m_as_features.pNext = &m_rt_pipeline_features;
+        
+        m_buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
+        m_buffer_device_address_features.pNext = &m_as_features;
+        
+        m_descriptor_indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+        m_descriptor_indexing_features.pNext = &m_buffer_device_address_features;
+        
+        VkPhysicalDeviceFeatures2 physical_device_features2 = {};
+        physical_device_features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        physical_device_features2.pNext = &m_descriptor_indexing_features;
+        
+        vkGetPhysicalDeviceFeatures2(m_physical_device, &physical_device_features2);
+        
+        // 检查光线追踪支持
+        m_ray_tracing_supported = m_rt_pipeline_features.rayTracingPipeline &&
+                                 m_as_features.accelerationStructure &&
+                                 m_buffer_device_address_features.bufferDeviceAddress &&
+                                 m_descriptor_indexing_features.descriptorBindingPartiallyBound;
+        
+        if (m_ray_tracing_supported)
+        {
+            // 查询光线追踪属性
+            m_rt_pipeline_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+            m_rt_pipeline_properties.pNext = nullptr;
+            
+            m_as_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+            m_as_properties.pNext = &m_rt_pipeline_properties;
+            
+            VkPhysicalDeviceProperties2 physical_device_properties2 = {};
+            physical_device_properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+            physical_device_properties2.pNext = &m_as_properties;
+            
+            vkGetPhysicalDeviceProperties2(m_physical_device, &physical_device_properties2);
+            
+            LOG_INFO("Ray tracing supported! Max recursion depth: {}", m_rt_pipeline_properties.maxRayRecursionDepth);
+        }
+        else
+        {
+            LOG_WARN("Ray tracing not supported on this device");
+        }
+
         // physical device features
         VkPhysicalDeviceFeatures physical_device_features = {};
 
@@ -881,10 +925,30 @@ namespace Elish
         device_create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         device_create_info.pQueueCreateInfos       = queue_create_infos.data();
         device_create_info.queueCreateInfoCount    = static_cast<uint32_t>(queue_create_infos.size());
-        device_create_info.pEnabledFeatures        = &physical_device_features;
         device_create_info.enabledExtensionCount   = static_cast<uint32_t>(m_device_extensions.size());
         device_create_info.ppEnabledExtensionNames = m_device_extensions.data();
         device_create_info.enabledLayerCount       = 0;
+        
+        // 如果支持光线追踪，使用特性链，否则使用传统特性
+        if (m_ray_tracing_supported)
+        {
+            // 启用光线追踪特性
+            m_rt_pipeline_features.rayTracingPipeline = VK_TRUE;
+            m_as_features.accelerationStructure = VK_TRUE;
+            m_buffer_device_address_features.bufferDeviceAddress = VK_TRUE;
+            m_descriptor_indexing_features.descriptorBindingPartiallyBound = VK_TRUE;
+            m_descriptor_indexing_features.runtimeDescriptorArray = VK_TRUE;
+            
+            // 设置传统特性到Features2结构中
+            physical_device_features2.features = physical_device_features;
+            device_create_info.pNext = &physical_device_features2;
+            device_create_info.pEnabledFeatures = nullptr;
+        }
+        else
+        {
+            device_create_info.pEnabledFeatures = &physical_device_features;
+            device_create_info.pNext = nullptr;
+        }
 
         if (vkCreateDevice(m_physical_device, &device_create_info, nullptr, &m_device) != VK_SUCCESS)
         {
@@ -922,6 +986,16 @@ namespace Elish
         _vkCmdBindDescriptorSets = (PFN_vkCmdBindDescriptorSets)vkGetDeviceProcAddr(m_device, "vkCmdBindDescriptorSets");
         _vkCmdClearAttachments   = (PFN_vkCmdClearAttachments)vkGetDeviceProcAddr(m_device, "vkCmdClearAttachments");
         _vkCmdPushConstants      = (PFN_vkCmdPushConstants)vkGetDeviceProcAddr(m_device, "vkCmdPushConstants");
+        
+        // 初始化光线追踪相关函数指针
+        _vkCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(m_device, "vkCreateAccelerationStructureKHR");
+        _vkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(m_device, "vkDestroyAccelerationStructureKHR");
+        _vkGetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(m_device, "vkGetAccelerationStructureDeviceAddressKHR");
+        _vkGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(m_device, "vkGetAccelerationStructureBuildSizesKHR");
+        _vkCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(m_device, "vkCmdBuildAccelerationStructuresKHR");
+        _vkCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(m_device, "vkCreateRayTracingPipelinesKHR");
+        _vkGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(m_device, "vkGetRayTracingShaderGroupHandlesKHR");
+        _vkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(m_device, "vkCmdTraceRaysKHR");
 
         m_depth_image_format = (RHIFormat)findDepthFormat();
     }
@@ -1773,6 +1847,393 @@ namespace Elish
         }
     }
 
+    /**
+     * @brief 创建光线追踪管线
+     * @param pipelineCache 管线缓存对象
+     * @param createInfoCount 创建信息数量
+     * @param pCreateInfos 光线追踪管线创建信息数组
+     * @param pPipelines 输出的管线对象数组
+     * @return 创建是否成功
+     */
+    bool VulkanRHI::createRayTracingPipelines(RHIPipelineCache* pipelineCache, uint32_t createInfoCount, const RHIRayTracingPipelineCreateInfo* pCreateInfos, RHIPipeline* &pPipelines)
+    {
+        if (!pCreateInfos || !_vkCreateRayTracingPipelinesKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            return false;
+        }
+        
+        // 转换着色器阶段信息
+        std::vector<VkPipelineShaderStageCreateInfo> shader_stages(pCreateInfos->stageCount);
+        for (uint32_t i = 0; i < pCreateInfos->stageCount; ++i)
+        {
+            const auto& rhi_stage = pCreateInfos->pStages[i];
+            auto& vk_stage = shader_stages[i];
+            
+            vk_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+            vk_stage.pNext = rhi_stage.pNext;
+            vk_stage.flags = (VkPipelineShaderStageCreateFlags)rhi_stage.flags;
+            vk_stage.stage = (VkShaderStageFlagBits)rhi_stage.stage;
+            vk_stage.module = ((VulkanShader*)rhi_stage.module)->getResource();
+            vk_stage.pName = rhi_stage.pName;
+            vk_stage.pSpecializationInfo = nullptr; // 暂不支持特化常量
+        }
+        
+        // 转换着色器组信息
+        std::vector<VkRayTracingShaderGroupCreateInfoKHR> shader_groups(pCreateInfos->groupCount);
+        for (uint32_t i = 0; i < pCreateInfos->groupCount; ++i)
+        {
+            const auto& rhi_group = pCreateInfos->pGroups[i];
+            auto& vk_group = shader_groups[i];
+            
+            vk_group.sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+            vk_group.pNext = rhi_group.pNext;
+            vk_group.type = (VkRayTracingShaderGroupTypeKHR)rhi_group.type;
+            vk_group.generalShader = rhi_group.generalShader;
+            vk_group.closestHitShader = rhi_group.closestHitShader;
+            vk_group.anyHitShader = rhi_group.anyHitShader;
+            vk_group.intersectionShader = rhi_group.intersectionShader;
+            vk_group.pShaderGroupCaptureReplayHandle = rhi_group.pShaderGroupCaptureReplayHandle;
+        }
+        
+        // 创建Vulkan光线追踪管线创建信息
+        VkRayTracingPipelineCreateInfoKHR create_info{};
+        create_info.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+        create_info.pNext = pCreateInfos->pNext;
+        create_info.flags = (VkPipelineCreateFlags)pCreateInfos->flags;
+        create_info.stageCount = pCreateInfos->stageCount;
+        create_info.pStages = shader_stages.data();
+        create_info.groupCount = pCreateInfos->groupCount;
+        create_info.pGroups = shader_groups.data();
+        create_info.maxPipelineRayRecursionDepth = pCreateInfos->maxPipelineRayRecursionDepth;
+        create_info.pLibraryInfo = nullptr; // 暂不支持管线库
+        create_info.pLibraryInterface = nullptr;
+        create_info.pDynamicState = nullptr; // 暂不支持动态状态
+        create_info.layout = ((VulkanPipelineLayout*)pCreateInfos->layout)->getResource();
+        
+        if (pCreateInfos->basePipelineHandle != nullptr)
+        {
+            create_info.basePipelineHandle = ((VulkanPipeline*)pCreateInfos->basePipelineHandle)->getResource();
+        }
+        else
+        {
+            create_info.basePipelineHandle = VK_NULL_HANDLE;
+        }
+        create_info.basePipelineIndex = pCreateInfos->basePipelineIndex;
+        
+        // 创建管线对象
+        pPipelines = new VulkanPipeline();
+        VkPipeline vk_pipeline;
+        VkPipelineCache vk_pipeline_cache = VK_NULL_HANDLE;
+        if (pipelineCache != nullptr)
+        {
+            vk_pipeline_cache = ((VulkanPipelineCache*)pipelineCache)->getResource();
+        }
+        
+        // 调用Vulkan API创建光线追踪管线
+        VkResult result = _vkCreateRayTracingPipelinesKHR(
+            m_device,
+            VK_NULL_HANDLE, // deferredOperation
+            vk_pipeline_cache,
+            createInfoCount,
+            &create_info,
+            nullptr,
+            &vk_pipeline
+        );
+        
+        if (result == VK_SUCCESS)
+        {
+            ((VulkanPipeline*)pPipelines)->setResource(vk_pipeline);
+            return true;
+        }
+        else
+        {
+            LOG_ERROR("Failed to create ray tracing pipeline! VkResult: {}", result);
+            delete pPipelines;
+            pPipelines = nullptr;
+            return false;
+        }
+        // 需要检查设备是否支持光线追踪扩展
+        // 创建VkRayTracingPipelineCreateInfoKHR结构
+        // 调用vkCreateRayTracingPipelinesKHR
+        LOG_ERROR("Ray tracing pipelines not implemented yet!");
+        return false;
+    }
+
+    /**
+     * @brief 创建加速结构
+     * @param pCreateInfo 加速结构创建信息
+     * @param pAccelerationStructure 输出的加速结构对象
+     * @return 创建是否成功
+     */
+    bool VulkanRHI::createAccelerationStructure(const RHIAccelerationStructureCreateInfo* pCreateInfo, RHIAccelerationStructure* &pAccelerationStructure)
+    {
+        if (!pCreateInfo || !_vkCreateAccelerationStructureKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            return false;
+        }
+
+        // 创建VulkanAccelerationStructure包装对象
+        VulkanAccelerationStructure* vulkan_as = new VulkanAccelerationStructure();
+        
+        // 设置加速结构类型
+        vulkan_as->setType(pCreateInfo->type);
+        
+        // 创建底层缓冲区用于存储加速结构
+        VkAccelerationStructureCreateInfoKHR as_create_info{};
+        as_create_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+        as_create_info.buffer = ((VulkanBuffer*)pCreateInfo->buffer)->getResource();
+        as_create_info.offset = pCreateInfo->offset;
+        as_create_info.size = pCreateInfo->size;
+        as_create_info.type = (VkAccelerationStructureTypeKHR)pCreateInfo->type;
+        
+        VkAccelerationStructureKHR vk_as;
+        VkResult result = _vkCreateAccelerationStructureKHR(m_device, &as_create_info, nullptr, &vk_as);
+        
+        if (result != VK_SUCCESS)
+        {
+            LOG_ERROR("Failed to create acceleration structure! VkResult: {}", result);
+            delete vulkan_as;
+            return false;
+        }
+        
+        // 设置资源和缓冲区
+        vulkan_as->setResource(vk_as);
+        vulkan_as->setBuffer((VulkanBuffer*)pCreateInfo->buffer);
+        
+        pAccelerationStructure = vulkan_as;
+        return true;
+    }
+
+    /**
+     * @brief 构建加速结构
+     * @param commandBuffer 命令缓冲区
+     * @param pBuildInfo 加速结构构建信息
+     * @return 构建是否成功
+     */
+    bool VulkanRHI::buildAccelerationStructure(RHICommandBuffer* commandBuffer, const RHIAccelerationStructureBuildInfo* pBuildInfo)
+    {
+        if (!pBuildInfo || !_vkCmdBuildAccelerationStructuresKHR || !_vkGetAccelerationStructureBuildSizesKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            return false;
+        }
+
+        // 创建几何信息数组
+        std::vector<VkAccelerationStructureGeometryKHR> geometries;
+        std::vector<VkAccelerationStructureBuildRangeInfoKHR> build_ranges;
+        
+        for (uint32_t i = 0; i < pBuildInfo->geometryCount; ++i)
+        {
+            const auto& rhi_geometry = pBuildInfo->pGeometries[i];
+            
+            VkAccelerationStructureGeometryKHR geometry{};
+            geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            geometry.geometryType = (VkGeometryTypeKHR)rhi_geometry.geometryType;
+            geometry.flags = (VkGeometryFlagsKHR)rhi_geometry.flags;
+            
+            if (rhi_geometry.geometryType == RHI_GEOMETRY_TYPE_TRIANGLES_KHR)
+            {
+                geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+                geometry.geometry.triangles.vertexData.deviceAddress = rhi_geometry.triangles.vertexData.deviceAddress;
+                geometry.geometry.triangles.vertexStride = rhi_geometry.triangles.vertexStride;
+                geometry.geometry.triangles.vertexFormat = (VkFormat)rhi_geometry.triangles.vertexFormat;
+                geometry.geometry.triangles.indexData.deviceAddress = rhi_geometry.triangles.indexData.deviceAddress;
+                geometry.geometry.triangles.indexType = (VkIndexType)rhi_geometry.triangles.indexType;
+            }
+            
+            geometries.push_back(geometry);
+            
+            VkAccelerationStructureBuildRangeInfoKHR build_range{};
+            build_range.primitiveCount = 1; // 默认值，需要根据实际几何数据设置
+            build_range.primitiveOffset = 0; // 默认值
+            build_range.firstVertex = 0; // 默认值
+            build_range.transformOffset = 0; // 默认值
+            build_ranges.push_back(build_range);
+        }
+        
+        // 创建构建几何信息
+        VkAccelerationStructureBuildGeometryInfoKHR build_geometry_info{};
+        build_geometry_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+        build_geometry_info.type = (VkAccelerationStructureTypeKHR)pBuildInfo->type;
+        build_geometry_info.flags = (VkBuildAccelerationStructureFlagsKHR)pBuildInfo->flags;
+        build_geometry_info.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
+        build_geometry_info.dstAccelerationStructure = ((VulkanAccelerationStructure*)pBuildInfo->dstAccelerationStructure)->getResource();
+        build_geometry_info.geometryCount = static_cast<uint32_t>(geometries.size());
+        build_geometry_info.pGeometries = geometries.data();
+        build_geometry_info.scratchData.deviceAddress = pBuildInfo->scratchData.deviceAddress;
+        
+        // 构建加速结构
+        const VkAccelerationStructureBuildRangeInfoKHR* build_range_infos = build_ranges.data();
+        _vkCmdBuildAccelerationStructuresKHR(
+            ((VulkanCommandBuffer*)commandBuffer)->getResource(),
+            1,
+            &build_geometry_info,
+            &build_range_infos
+        );
+        
+        return true;
+    }
+
+    /**
+     * @brief 获取加速结构设备地址
+     * @param pInfo 加速结构设备地址信息
+     * @return 设备地址
+     */
+    void VulkanRHI::getAccelerationStructureDeviceAddress(const RHIAccelerationStructureDeviceAddressInfo* pInfo, RHIDeviceAddress* pAddress)
+    {
+        if (!pInfo || !pInfo->accelerationStructure || !pAddress || !_vkGetAccelerationStructureDeviceAddressKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            if (pAddress) *pAddress = 0;
+            return;
+        }
+        
+        VkAccelerationStructureDeviceAddressInfoKHR address_info{};
+        address_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_DEVICE_ADDRESS_INFO_KHR;
+        address_info.accelerationStructure = ((VulkanAccelerationStructure*)pInfo->accelerationStructure)->getResource();
+        
+        VkDeviceAddress device_address = _vkGetAccelerationStructureDeviceAddressKHR(m_device, &address_info);
+        
+        *pAddress = static_cast<RHIDeviceAddress>(device_address);
+    }
+
+    /**
+     * @brief 创建着色器绑定表
+     * @param pCreateInfo 着色器绑定表创建信息
+     * @param pipeline 光线追踪管线
+     * @param pBuffer 输出的着色器绑定表缓冲区
+     * @param pAllocation VMA分配信息
+     * @return 创建是否成功
+     */
+    bool VulkanRHI::createShaderBindingTable(const RHIShaderBindingTableCreateInfo* pCreateInfo, RHIPipeline* pipeline, RHIBuffer* &pBuffer, VmaAllocation* pAllocation)
+    {
+        if (!pCreateInfo || !pipeline || !_vkGetRayTracingShaderGroupHandlesKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            return false;
+        }
+        
+        // 获取光线追踪管线属性
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_props{};
+        rt_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+        
+        VkPhysicalDeviceProperties2 props{};
+        props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props.pNext = &rt_props;
+        vkGetPhysicalDeviceProperties2(m_physical_device, &props);
+        
+        // 计算着色器绑定表大小
+        uint32_t handle_size = rt_props.shaderGroupHandleSize;
+        uint32_t handle_alignment = rt_props.shaderGroupHandleAlignment;
+        uint32_t group_count = pCreateInfo->raygenShaderCount + pCreateInfo->missShaderCount + pCreateInfo->hitShaderCount;
+        
+        uint32_t sbt_size = group_count * handle_size;
+        
+        // 获取着色器组句柄
+        std::vector<uint8_t> shader_handles(sbt_size);
+        VkResult result = _vkGetRayTracingShaderGroupHandlesKHR(
+            m_device,
+            ((VulkanPipeline*)pipeline)->getResource(),
+            0,
+            group_count,
+            sbt_size,
+            shader_handles.data()
+        );
+        
+        if (result != VK_SUCCESS)
+        {
+            LOG_ERROR("Failed to get ray tracing shader group handles! VkResult: {}", result);
+            return false;
+        }
+        
+        // 创建着色器绑定表缓冲区
+        RHIBufferCreateInfo buffer_create_info{};
+        buffer_create_info.size = sbt_size;
+        buffer_create_info.usage = RHI_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | RHI_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+        
+        VmaAllocationCreateInfo alloc_info{};
+        alloc_info.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+        
+        VmaAllocation allocation;
+        VmaAllocationInfo allocation_info;
+        
+        if (!createBufferVMA(m_assets_allocator, &buffer_create_info, &alloc_info, pBuffer, &allocation, &allocation_info))
+        {
+            LOG_ERROR("Failed to create shader binding table buffer!");
+            return false;
+        }
+        
+        // 设置分配信息
+        if (pAllocation)
+        {
+            *pAllocation = allocation;
+        }
+        
+        // 复制着色器句柄数据到缓冲区
+        void* mapped_data;
+        if (mapMemory((RHIDeviceMemory*)allocation_info.deviceMemory, 0, sbt_size, 0, &mapped_data))
+        {
+            memcpy(mapped_data, shader_handles.data(), sbt_size);
+            unmapMemory((RHIDeviceMemory*)allocation_info.deviceMemory);
+        }
+        else
+        {
+            LOG_ERROR("Failed to map shader binding table buffer memory!");
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * @brief 执行光线追踪渲染命令
+     * @param commandBuffer 命令缓冲区
+     * @param pTraceRaysInfo 光线追踪信息
+     */
+    void VulkanRHI::cmdTraceRays(RHICommandBuffer* commandBuffer, const RHITraceRaysInfo* pTraceRaysInfo)
+    {
+        if (!commandBuffer || !pTraceRaysInfo || !_vkCmdTraceRaysKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            return;
+        }
+        
+        // 创建着色器绑定表区域结构
+        VkStridedDeviceAddressRegionKHR raygen_sbt{};
+        raygen_sbt.deviceAddress = pTraceRaysInfo->raygenShaderBindingTableAddress;
+        raygen_sbt.stride = pTraceRaysInfo->raygenShaderBindingTableStride;
+        raygen_sbt.size = pTraceRaysInfo->raygenShaderBindingTableSize;
+        
+        VkStridedDeviceAddressRegionKHR miss_sbt{};
+        miss_sbt.deviceAddress = pTraceRaysInfo->missShaderBindingTableAddress;
+        miss_sbt.stride = pTraceRaysInfo->missShaderBindingTableStride;
+        miss_sbt.size = pTraceRaysInfo->missShaderBindingTableSize;
+        
+        VkStridedDeviceAddressRegionKHR hit_sbt{};
+        hit_sbt.deviceAddress = pTraceRaysInfo->hitShaderBindingTableAddress;
+        hit_sbt.stride = pTraceRaysInfo->hitShaderBindingTableStride;
+        hit_sbt.size = pTraceRaysInfo->hitShaderBindingTableSize;
+        
+        VkStridedDeviceAddressRegionKHR callable_sbt{};
+        callable_sbt.deviceAddress = pTraceRaysInfo->callableShaderBindingTableAddress;
+        callable_sbt.stride = pTraceRaysInfo->callableShaderBindingTableStride;
+        callable_sbt.size = pTraceRaysInfo->callableShaderBindingTableSize;
+        
+        // 执行光线追踪命令
+        _vkCmdTraceRaysKHR(
+            ((VulkanCommandBuffer*)commandBuffer)->getResource(),
+            &raygen_sbt,
+            &miss_sbt,
+            &hit_sbt,
+            &callable_sbt,
+            pTraceRaysInfo->width,
+            pTraceRaysInfo->height,
+            pTraceRaysInfo->depth
+        );
+    }
+
     bool VulkanRHI::createPipelineLayout(const RHIPipelineLayoutCreateInfo* pCreateInfo, RHIPipelineLayout* &pPipelineLayout)
     {
         //descriptor_set_layout
@@ -1786,12 +2247,30 @@ namespace Elish
             vk_descriptor_set_layout_element = ((VulkanDescriptorSetLayout*)rhi_descriptor_set_layout_element)->getResource();
         };
 
+        // 处理推送常量范围
+        std::vector<VkPushConstantRange> vk_push_constant_ranges;
+        if (pCreateInfo->pushConstantRangeCount > 0 && pCreateInfo->pPushConstantRanges != nullptr)
+        {
+            vk_push_constant_ranges.resize(pCreateInfo->pushConstantRangeCount);
+            for (uint32_t i = 0; i < pCreateInfo->pushConstantRangeCount; ++i)
+            {
+                const auto& rhi_range = pCreateInfo->pPushConstantRanges[i];
+                auto& vk_range = vk_push_constant_ranges[i];
+                
+                vk_range.stageFlags = (VkShaderStageFlags)rhi_range.stageFlags;
+                vk_range.offset = rhi_range.offset;
+                vk_range.size = rhi_range.size;
+            }
+        }
+
         VkPipelineLayoutCreateInfo create_info{};
         create_info.sType = (VkStructureType)pCreateInfo->sType;
         create_info.pNext = (const void*)pCreateInfo->pNext;
         create_info.flags = (VkPipelineLayoutCreateFlags)pCreateInfo->flags;
         create_info.setLayoutCount = pCreateInfo->setLayoutCount;
         create_info.pSetLayouts = vk_descriptor_set_layout_list.data();
+        create_info.pushConstantRangeCount = pCreateInfo->pushConstantRangeCount;
+        create_info.pPushConstantRanges = vk_push_constant_ranges.empty() ? nullptr : vk_push_constant_ranges.data();
 
         pPipelineLayout = new VulkanPipelineLayout();
         VkPipelineLayout vk_pipeline_layout;
@@ -3367,10 +3846,6 @@ namespace Elish
             auto& vk_descriptor_set_layout_element = vk_descriptor_set_layout_list[i];
 
             vk_descriptor_set_layout_element = ((VulkanDescriptorSetLayout*)rhi_descriptor_set_layout_element)->getResource();
-
-            VulkanDescriptorSetLayout* test = ((VulkanDescriptorSetLayout*)rhi_descriptor_set_layout_element);
-
-            test = nullptr;
         };
 
         VkDescriptorSetAllocateInfo descriptorset_allocate_info{};
@@ -3380,18 +3855,24 @@ namespace Elish
         descriptorset_allocate_info.descriptorSetCount = pAllocateInfo->descriptorSetCount;
         descriptorset_allocate_info.pSetLayouts = vk_descriptor_set_layout_list.data();
 
-        VkDescriptorSet vk_descriptor_set;
+        std::vector<VkDescriptorSet> vk_descriptor_sets(pAllocateInfo->descriptorSetCount);
         pDescriptorSets = new VulkanDescriptorSet;
-        VkResult result = vkAllocateDescriptorSets(m_device, &descriptorset_allocate_info, &vk_descriptor_set);
-        ((VulkanDescriptorSet*)pDescriptorSets)->setResource(vk_descriptor_set);
+        VkResult result = vkAllocateDescriptorSets(m_device, &descriptorset_allocate_info, vk_descriptor_sets.data());
+        ((VulkanDescriptorSet*)pDescriptorSets)->setResource(vk_descriptor_sets[0]);
 
         if (result == VK_SUCCESS)
         {
+            LOG_DEBUG("Successfully allocated {} descriptor sets", pAllocateInfo->descriptorSetCount);
             return true;
         }
         else
         {
-            LOG_ERROR("vkAllocateDescriptorSets failed!");
+            LOG_ERROR("vkAllocateDescriptorSets failed with result: {}", static_cast<int>(result));
+            // 清理已分配的内存
+            if (pDescriptorSets) {
+                delete pDescriptorSets;
+                pDescriptorSets = nullptr;
+            }
             return false;
         }
     }
@@ -3989,6 +4470,333 @@ namespace Elish
     void VulkanRHI::setCurrentFrameIndex(uint8_t index)
     {
         m_current_frame_index = index;
+    }
+
+    /**
+     * @brief 获取光线追踪着色器组句柄大小
+     * @return 着色器组句柄大小
+     */
+    uint32_t VulkanRHI::getRayTracingShaderGroupHandleSize()
+    {
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_props{};
+        rt_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+        
+        VkPhysicalDeviceProperties2 props{};
+        props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props.pNext = &rt_props;
+        vkGetPhysicalDeviceProperties2(m_physical_device, &props);
+        
+        return rt_props.shaderGroupHandleSize;
+    }
+
+    /**
+     * @brief 获取光线追踪着色器组基础对齐
+     * @return 着色器组基础对齐
+     */
+    uint32_t VulkanRHI::getRayTracingShaderGroupBaseAlignment()
+    {
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_props{};
+        rt_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+        
+        VkPhysicalDeviceProperties2 props{};
+        props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        props.pNext = &rt_props;
+        vkGetPhysicalDeviceProperties2(m_physical_device, &props);
+        
+        return rt_props.shaderGroupBaseAlignment;
+    }
+
+    /**
+     * @brief 获取光线追踪着色器组句柄
+     * @param pipeline 光线追踪管线
+     * @param firstGroup 第一个着色器组索引
+     * @param groupCount 着色器组数量
+     * @param dataSize 数据大小
+     * @param pData 输出数据缓冲区
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::getRayTracingShaderGroupHandlesKHR(RHIPipeline* pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData)
+    {
+        if (!pipeline || !pData || !_vkGetRayTracingShaderGroupHandlesKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            return RHI_FALSE;
+        }
+        
+        VkResult result = _vkGetRayTracingShaderGroupHandlesKHR(
+            m_device,
+            ((VulkanPipeline*)pipeline)->getResource(),
+            firstGroup,
+            groupCount,
+            dataSize,
+            pData
+        );
+        
+        return (result == VK_SUCCESS) ? RHI_SUCCESS : RHI_FALSE;
+    }
+
+    /**
+     * @brief 创建光线追踪管线
+     * @param create_info_count 创建信息数量
+     * @param create_infos 创建信息数组
+     * @param pipelines 输出管线数组
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::createRayTracingPipelinesKHR(uint32_t create_info_count, const RHIRayTracingPipelineCreateInfo* create_infos, RHIPipeline*& pipelines)
+    {
+        if (!create_infos || create_info_count == 0 || !_vkCreateRayTracingPipelinesKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            return RHI_FALSE;
+        }
+        
+        // 这里应该调用已有的createRayTracingPipelines函数
+        bool success = createRayTracingPipelines(nullptr, create_info_count, create_infos, pipelines);
+        return success ? RHI_SUCCESS : RHI_FALSE;
+    }
+
+    /**
+     * @brief 分配描述符集
+     * @param layout 描述符集布局
+     * @param descriptor_set 输出描述符集
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::allocateDescriptorSets(RHIDescriptorSetLayout* layout, RHIDescriptorSet*& descriptor_set)
+    {
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = ((VulkanDescriptorPool*)m_descriptor_pool)->getResource();
+        allocInfo.descriptorSetCount = 1;
+        VkDescriptorSetLayout vk_layout = ((VulkanDescriptorSetLayout*)layout)->getResource();
+        allocInfo.pSetLayouts = &vk_layout;
+
+        VkDescriptorSet vk_descriptor_set;
+        VkResult result = vkAllocateDescriptorSets(m_device, &allocInfo, &vk_descriptor_set);
+        
+        if (result == VK_SUCCESS)
+        {
+            descriptor_set = new VulkanDescriptorSet();
+            ((VulkanDescriptorSet*)descriptor_set)->setResource(vk_descriptor_set);
+            return RHI_SUCCESS;
+        }
+        return RHI_FALSE;
+    }
+
+    /**
+     * @brief 创建缓冲区
+     * @param create_info 创建信息
+     * @param buffer 输出缓冲区
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::createBuffer(const RHIBufferCreateInfo* create_info, RHIBuffer*& buffer)
+    {
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = create_info->size;
+        bufferInfo.usage = create_info->usage;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VkBuffer vk_buffer;
+        VkResult result = vkCreateBuffer(m_device, &bufferInfo, nullptr, &vk_buffer);
+        
+        if (result == VK_SUCCESS)
+        {
+            buffer = new VulkanBuffer();
+            ((VulkanBuffer*)buffer)->setResource(vk_buffer);
+            return RHI_SUCCESS;
+        }
+        return RHI_FALSE;
+    }
+
+    /**
+     * @brief 创建图像视图
+     * @param create_info 创建信息
+     * @param image_view 输出图像视图
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::createImageView(const RHIImageViewCreateInfo* create_info, RHIImageView*& image_view)
+    {
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = ((VulkanImage*)create_info->image)->getResource();
+        viewInfo.viewType = (VkImageViewType)create_info->viewType;
+        viewInfo.format = (VkFormat)create_info->format;
+        viewInfo.subresourceRange.aspectMask = create_info->subresourceRange.aspectMask;
+        viewInfo.subresourceRange.baseMipLevel = create_info->subresourceRange.baseMipLevel;
+        viewInfo.subresourceRange.levelCount = create_info->subresourceRange.levelCount;
+        viewInfo.subresourceRange.baseArrayLayer = create_info->subresourceRange.baseArrayLayer;
+        viewInfo.subresourceRange.layerCount = create_info->subresourceRange.layerCount;
+
+        VkImageView vk_image_view;
+        VkResult result = vkCreateImageView(m_device, &viewInfo, nullptr, &vk_image_view);
+        
+        if (result == VK_SUCCESS)
+        {
+            image_view = new VulkanImageView();
+            ((VulkanImageView*)image_view)->setResource(vk_image_view);
+            return RHI_SUCCESS;
+        }
+        return RHI_FALSE;
+    }
+
+    /**
+     * @brief 获取缓冲区内存需求
+     * @param buffer 缓冲区
+     * @param pMemoryRequirements 输出内存需求
+     */
+    void VulkanRHI::getBufferMemoryRequirements(RHIBuffer* buffer, RHIMemoryRequirements* pMemoryRequirements)
+    {
+        VkMemoryRequirements memRequirements;
+        vkGetBufferMemoryRequirements(m_device, ((VulkanBuffer*)buffer)->getResource(), &memRequirements);
+        
+        pMemoryRequirements->size = memRequirements.size;
+        pMemoryRequirements->alignment = memRequirements.alignment;
+        pMemoryRequirements->memoryTypeBits = memRequirements.memoryTypeBits;
+    }
+
+    /**
+     * @brief 分配设备内存
+     * @param pAllocateInfo 分配信息
+     * @param pMemory 输出设备内存
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::allocateMemory(const RHIMemoryAllocateInfo* pAllocateInfo, RHIDeviceMemory*& pMemory)
+    {
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = pAllocateInfo->allocationSize;
+        allocInfo.memoryTypeIndex = pAllocateInfo->memoryTypeIndex;
+
+        VkDeviceMemory vk_memory;
+        VkResult result = vkAllocateMemory(m_device, &allocInfo, nullptr, &vk_memory);
+        
+        if (result == VK_SUCCESS)
+        {
+            pMemory = new VulkanDeviceMemory();
+            ((VulkanDeviceMemory*)pMemory)->setResource(vk_memory);
+            return RHI_SUCCESS;
+        }
+        return RHI_FALSE;
+    }
+
+    /**
+     * @brief 绑定缓冲区内存
+     * @param buffer 缓冲区
+     * @param memory 设备内存
+     * @param memory_offset 内存偏移
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::bindBufferMemory(RHIBuffer* buffer, RHIDeviceMemory* memory, RHIDeviceSize memory_offset)
+    {
+        VkResult result = vkBindBufferMemory(m_device, 
+            ((VulkanBuffer*)buffer)->getResource(), 
+            ((VulkanDeviceMemory*)memory)->getResource(), 
+            memory_offset);
+        
+        return (result == VK_SUCCESS) ? RHI_SUCCESS : RHI_FALSE;
+    }
+
+    /**
+     * @brief 获取图像内存需求
+     * @param image 图像
+     * @param memory_requirements 输出内存需求
+     */
+    void VulkanRHI::getImageMemoryRequirements(RHIImage* image, RHIMemoryRequirements* memory_requirements)
+    {
+        VkMemoryRequirements memRequirements;
+        vkGetImageMemoryRequirements(m_device, ((VulkanImage*)image)->getResource(), &memRequirements);
+        
+        memory_requirements->size = memRequirements.size;
+        memory_requirements->alignment = memRequirements.alignment;
+        memory_requirements->memoryTypeBits = memRequirements.memoryTypeBits;
+    }
+
+    /**
+     * @brief 绑定图像内存
+     * @param image 图像
+     * @param memory 设备内存
+     * @param memory_offset 内存偏移
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::bindImageMemory(RHIImage* image, RHIDeviceMemory* memory, RHIDeviceSize memory_offset)
+    {
+        VkResult result = vkBindImageMemory(m_device, 
+            ((VulkanImage*)image)->getResource(), 
+            ((VulkanDeviceMemory*)memory)->getResource(), 
+            memory_offset);
+        
+        return (result == VK_SUCCESS) ? RHI_SUCCESS : RHI_FALSE;
+    }
+
+    /**
+     * @brief 创建图像
+     * @param create_info 创建信息
+     * @param image 输出图像
+     * @return 操作结果
+     */
+    RHIResult VulkanRHI::createImage(const RHIImageCreateInfo* create_info, RHIImage*& image)
+    {
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = (VkImageType)create_info->imageType;
+        imageInfo.extent.width = create_info->extent.width;
+        imageInfo.extent.height = create_info->extent.height;
+        imageInfo.extent.depth = create_info->extent.depth;
+        imageInfo.mipLevels = create_info->mipLevels;
+        imageInfo.arrayLayers = create_info->arrayLayers;
+        imageInfo.format = (VkFormat)create_info->format;
+        imageInfo.tiling = (VkImageTiling)create_info->tiling;
+        imageInfo.initialLayout = (VkImageLayout)create_info->initialLayout;
+        imageInfo.usage = create_info->usage;
+        imageInfo.samples = (VkSampleCountFlagBits)create_info->samples;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VkImage vk_image;
+        VkResult result = vkCreateImage(m_device, &imageInfo, nullptr, &vk_image);
+        
+        if (result == VK_SUCCESS)
+        {
+            image = new VulkanImage();
+            ((VulkanImage*)image)->setResource(vk_image);
+            return RHI_SUCCESS;
+        }
+        return RHI_FALSE;
+    }
+
+    /**
+     * @brief 查找内存类型
+     * @param type_filter 类型过滤器
+     * @param properties 内存属性
+     * @return 内存类型索引
+     */
+    uint32_t VulkanRHI::findMemoryType(uint32_t type_filter, RHIMemoryPropertyFlags properties)
+    {
+        VkPhysicalDeviceMemoryProperties memProperties;
+        vkGetPhysicalDeviceMemoryProperties(m_physical_device, &memProperties);
+
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+        {
+            if ((type_filter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            {
+                return i;
+            }
+        }
+
+        throw std::runtime_error("failed to find suitable memory type!");
+    }
+
+    /**
+     * @brief 获取缓冲区设备地址
+     * @param buffer 缓冲区对象
+     * @return 缓冲区设备地址
+     */
+    RHIDeviceAddress VulkanRHI::getBufferDeviceAddress(RHIBuffer* buffer)
+    {
+        VkBufferDeviceAddressInfo address_info{};
+        address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+        address_info.buffer = ((VulkanBuffer*)buffer)->getResource();
+        
+        return vkGetBufferDeviceAddress(m_device, &address_info);
     }
 
 } // namespace Elish

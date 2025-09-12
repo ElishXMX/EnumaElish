@@ -62,6 +62,38 @@ namespace Elish
          */
         void drawInSubpass(RHICommandBuffer* command_buffer);
 
+        /**
+         * @brief 检测UI是否获得焦点
+         * 当UI获得焦点时，应该禁用相机视角移动
+         * @return true if UI has focus, false otherwise
+         */
+        bool isUIFocused() const;
+        
+        /**
+         * @brief 加载光线追踪演示场景
+         * 加载包含反射材质和几何体的演示场景
+         */
+        void loadRayTracingDemoScene();
+        
+        /**
+         * @brief 重置到默认场景
+         * 恢复到引擎的默认场景配置
+         */
+        void resetToDefaultScene();
+        
+        /**
+         * @brief 应用场景配置
+         * 根据JSON配置设置场景参数
+         * @param scene_config 场景配置JSON对象
+         */
+        void applySceneConfiguration(const json11::Json& scene_config);
+
+        /**
+         * @brief 获取主相机渲染通道实例
+         * @return 主相机渲染通道指针，如果获取失败返回nullptr
+         */
+        class MainCameraPass* getMainCameraPassInstance() const;
+
     private:
         /**
          * @brief 设置ImGui上下文和样式

@@ -75,6 +75,14 @@ namespace Elish
          * @return 光源投影视图矩阵
          */
         const Matrix4& getLightProjectionViewMatrix() const { return m_light_proj_view_matrix; }
+        
+        // 旧的光源管理系统接口已移除，现在使用 RenderResource 管理光源
+        
+        /**
+         * @brief 更新光源矩阵（公有接口）
+         * @param render_resource 渲染资源管理器
+         */
+        void updateLightMatrix(std::shared_ptr<RenderResource> render_resource);
 
     private:
         /**
@@ -112,21 +120,27 @@ namespace Elish
          */
         void drawModel();
         
-        /**
-         * @brief 更新光源矩阵
-         * @param render_resource 渲染资源管理器
-         */
-        void updateLightMatrix(std::shared_ptr<RenderResource> render_resource);
+
         
         /**
-         * @brief 更新uniform buffer数据
+         * @brief 更新uniform buffer
          */
         void updateUniformBuffer();
         
         /**
-         * @brief 创建uniform buffer资源
+         * @brief 创建uniform buffers
          */
         void createUniformBuffers();
+        
+        /**
+         * @brief 渲染测试四边形用于调试深度写入
+         */
+        void drawTestQuad();
+        
+        /**
+         * @brief 初始化测试四边形几何数据
+         */
+        void initializeTestQuad();
 
     private:
         // 描述符集布局
@@ -147,7 +161,8 @@ namespace Elish
         // 统一缓冲区对象
         struct ShadowUniformBufferObject
         {
-            glm::mat4 light_proj_view;
+            glm::mat4 view;  // 光源视图矩阵：世界空间 -> 光源视图空间
+            glm::mat4 proj;  // 光源投影矩阵：光源视图空间 -> 光源裁剪空间
         };
         
         // 渲染管线
@@ -162,12 +177,19 @@ namespace Elish
         
         // 描述符相关资源
         RHIDescriptorPool* m_descriptor_pool;
-        RHIDescriptorSet* m_descriptor_set;
+        RHIDescriptorSet* m_descriptor_sets[3];  // 🔧 修复：为每个飞行帧创建独立描述符集
         RHIDescriptorSetLayout* m_descriptor_set_layout;
         
         // 渲染通道和帧缓冲
         RHIRenderPass* m_render_pass;
         RHIFramebuffer* m_framebuffer;
+        
+        // 测试四边形相关资源
+        RHIBuffer* m_test_quad_vertex_buffer;
+        RHIDeviceMemory* m_test_quad_vertex_buffer_memory;
+        RHIBuffer* m_test_quad_index_buffer;
+        RHIDeviceMemory* m_test_quad_index_buffer_memory;
+        bool m_test_quad_initialized;
         
         // 当前渲染资源
         std::shared_ptr<RenderResource> m_current_render_resource;

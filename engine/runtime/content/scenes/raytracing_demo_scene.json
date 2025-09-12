@@ -1,0 +1,152 @@
+{
+    "scene_name": "Ray Tracing Demo Scene",
+    "description": "A demonstration scene showcasing ray tracing capabilities with reflective and refractive materials",
+    "version": "1.0",
+    
+    "camera": {
+        "position": [0.0, 2.0, 8.0],
+        "target": [0.0, 0.0, 0.0],
+        "up": [0.0, 1.0, 0.0],
+        "fov": 45.0,
+        "near": 0.1,
+        "far": 100.0
+    },
+    
+    "lighting": {
+        "directional_light": {
+            "direction": [-0.3, -0.8, -0.5],
+            "color": [1.0, 0.95, 0.8],
+            "intensity": 2.5,
+            "cast_shadows": true
+        },
+        "ambient_light": {
+            "color": [0.1, 0.1, 0.15],
+            "intensity": 0.3
+        }
+    },
+    
+    "materials": {
+        "chrome": {
+            "type": "metallic",
+            "albedo": [0.7, 0.7, 0.8],
+            "metallic": 1.0,
+            "roughness": 0.05,
+            "reflectance": 0.95
+        },
+        "gold": {
+            "type": "metallic",
+            "albedo": [1.0, 0.8, 0.2],
+            "metallic": 1.0,
+            "roughness": 0.1,
+            "reflectance": 0.9
+        },
+        "glass": {
+            "type": "dielectric",
+            "albedo": [0.95, 0.95, 1.0],
+            "metallic": 0.0,
+            "roughness": 0.0,
+            "transmission": 0.95,
+            "ior": 1.5
+        },
+        "marble": {
+            "type": "lambertian",
+            "albedo": [0.9, 0.9, 0.85],
+            "metallic": 0.0,
+            "roughness": 0.8,
+            "reflectance": 0.1
+        },
+        "red_plastic": {
+            "type": "lambertian",
+            "albedo": [0.8, 0.2, 0.2],
+            "metallic": 0.0,
+            "roughness": 0.6,
+            "reflectance": 0.05
+        }
+    },
+    
+    "objects": [
+        {
+            "name": "ground_plane",
+            "type": "plane",
+            "transform": {
+                "position": [0.0, -1.0, 0.0],
+                "rotation": [0.0, 0.0, 0.0],
+                "scale": [20.0, 1.0, 20.0]
+            },
+            "material": "marble"
+        },
+        {
+            "name": "chrome_sphere",
+            "type": "sphere",
+            "transform": {
+                "position": [-2.0, 0.5, 0.0],
+                "rotation": [0.0, 0.0, 0.0],
+                "scale": [1.0, 1.0, 1.0]
+            },
+            "material": "chrome"
+        },
+        {
+            "name": "glass_sphere",
+            "type": "sphere",
+            "transform": {
+                "position": [0.0, 0.5, 0.0],
+                "rotation": [0.0, 0.0, 0.0],
+                "scale": [1.0, 1.0, 1.0]
+            },
+            "material": "glass"
+        },
+        {
+            "name": "gold_sphere",
+            "type": "sphere",
+            "transform": {
+                "position": [2.0, 0.5, 0.0],
+                "rotation": [0.0, 0.0, 0.0],
+                "scale": [1.0, 1.0, 1.0]
+            },
+            "material": "gold"
+        },
+        {
+            "name": "red_cube",
+            "type": "cube",
+            "transform": {
+                "position": [-1.0, 0.5, -2.0],
+                "rotation": [0.0, 45.0, 0.0],
+                "scale": [1.0, 1.0, 1.0]
+            },
+            "material": "red_plastic"
+        },
+        {
+            "name": "chrome_cube",
+            "type": "cube",
+            "transform": {
+                "position": [1.0, 0.5, -2.0],
+                "rotation": [0.0, -30.0, 0.0],
+                "scale": [1.0, 1.0, 1.0]
+            },
+            "material": "chrome"
+        }
+    ],
+    
+    "raytracing_settings": {
+        "max_ray_depth": 8,
+        "samples_per_pixel": 4,
+        "enable_reflections": true,
+        "enable_refractions": true,
+        "enable_shadows": true,
+        "enable_global_illumination": false,
+        "resolution_scale": 1.0
+    },
+    
+    "post_processing": {
+        "tone_mapping": {
+            "enabled": true,
+            "exposure": 1.0,
+            "gamma": 2.2
+        },
+        "bloom": {
+            "enabled": false,
+            "threshold": 1.0,
+            "intensity": 0.5
+        }
+    }
+}

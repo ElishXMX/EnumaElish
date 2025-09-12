@@ -343,4 +343,71 @@ namespace Elish
     private:
         VkShaderModule m_resource;
     };
+    
+    /**
+     * @brief Vulkan加速结构包装类
+     * 用于封装VkAccelerationStructureKHR对象，提供统一的RHI接口
+     */
+    class VulkanAccelerationStructure : public RHIAccelerationStructure
+    {
+    public:
+        /**
+         * @brief 设置Vulkan加速结构资源
+         * @param res Vulkan加速结构句柄
+         */
+        void setResource(VkAccelerationStructureKHR res)
+        {
+            m_resource = res;
+        }
+        
+        /**
+         * @brief 获取Vulkan加速结构资源
+         * @return Vulkan加速结构句柄
+         */
+        VkAccelerationStructureKHR getResource() const
+        {
+            return m_resource;
+        }
+        
+        /**
+         * @brief 设置关联的缓冲区
+         * @param buffer 用于存储加速结构数据的缓冲区
+         */
+        void setBuffer(RHIBuffer* buffer)
+        {
+            m_buffer = buffer;
+        }
+        
+        /**
+         * @brief 获取关联的缓冲区
+         * @return 关联的缓冲区指针
+         */
+        RHIBuffer* getBuffer() const
+        {
+            return m_buffer;
+        }
+        
+        /**
+         * @brief 设置加速结构类型
+         * @param type 加速结构类型（BLAS或TLAS）
+         */
+        void setType(RHIAccelerationStructureTypeKHR type)
+        {
+            m_type = type;
+        }
+        
+        /**
+         * @brief 获取加速结构类型
+         * @return 加速结构类型
+         */
+        RHIAccelerationStructureTypeKHR getType() const
+        {
+            return m_type;
+        }
+        
+    private:
+        VkAccelerationStructureKHR m_resource;          // Vulkan加速结构句柄
+        RHIBuffer* m_buffer = nullptr;                  // 关联的缓冲区
+        RHIAccelerationStructureTypeKHR m_type;         // 加速结构类型
+    };
 }

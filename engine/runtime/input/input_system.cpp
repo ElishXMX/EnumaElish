@@ -7,6 +7,8 @@
 // #include "../render/render_camera.h"
 #include "../render/render_system.h"
 #include "../render/window_system.h"
+#include "../render/passes/ui_pass.h"
+#include "../render/render_pipeline.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -66,7 +68,7 @@ namespace Elish
         {
             const char* key_name = glfwGetKeyName(key, scancode);
             // LOG_DEBUG("[KEYBOARD_INPUT][{}ms] Key Pressed: {} (code: {}, scancode: {}, mods: {})", 
-                      timestamp, key_name ? key_name : "UNKNOWN", key, scancode, mods);
+            //           timestamp, key_name ? key_name : "UNKNOWN", key, scancode, mods);
             
             unsigned int old_command = m_game_command;
             
@@ -402,6 +404,22 @@ namespace Elish
      */
     void InputSystem::updateCameraState(float delta_time)
     {
+        // 检查UI是否获得焦点，如果是则禁用相机移动
+        auto render_system = g_runtime_global_context.m_render_system;
+        if (render_system) {
+            auto render_pipeline_base = render_system->getRenderPipeline();
+            if (render_pipeline_base) {
+                // 将基类指针转换为具体的RenderPipeline类型
+                auto render_pipeline = std::dynamic_pointer_cast<RenderPipeline>(render_pipeline_base);
+                if (render_pipeline) {
+                    auto ui_pass = render_pipeline->getUIPass();
+                    if (ui_pass && ui_pass->isUIFocused()) {
+                        return; // UI获得焦点时，禁用相机移动
+                    }
+                }
+            }
+        }
+        
         // 处理摄像机旋转
         processCameraRotation();
         
@@ -452,7 +470,7 @@ namespace Elish
         auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
         
         // 记录当前游戏命令状态
-        LOG_DEBUG("[processCameraMovement] Current game command: 0x{:X}, delta_time: {:.6f}", m_game_command, delta_time);
+        // LOG_DEBUG("[processCameraMovement] Current game command: 0x{:X}, delta_time: {:.6f}", m_game_command, delta_time);
         
         glm::vec3 movement(0.0f);
         float move_speed = CAMERA_MOVE_SPEED;
@@ -461,7 +479,7 @@ namespace Elish
         if (m_game_command & static_cast<unsigned int>(GameCommand::sprint))
         {
             move_speed *= CAMERA_SPRINT_MULTIPLIER;
-            LOG_DEBUG("[processCameraMovement] Sprint mode activated, speed: {:.3f}", move_speed);
+            // LOG_DEBUG("[processCameraMovement] Sprint mode activated, speed: {:.3f}", move_speed);
         }
         
         // 计算移动向量（基于摄像机的局部坐标系）
@@ -474,37 +492,37 @@ namespace Elish
         if (m_game_command & static_cast<unsigned int>(GameCommand::forward)) // W键前进
         {
             movement += forward;
-            LOG_DEBUG("[processCameraMovement] FORWARD command detected, adding forward vector: ({:.3f}, {:.3f}, {:.3f})", forward.x, forward.y, forward.z);
+            // LOG_DEBUG("[processCameraMovement] FORWARD command detected, adding forward vector: ({:.3f}, {:.3f}, {:.3f})", forward.x, forward.y, forward.z);
         }
         if (m_game_command & static_cast<unsigned int>(GameCommand::backward)) // S键后退
         {
             movement -= forward;
-            LOG_DEBUG("[processCameraMovement] BACKWARD command detected, subtracting forward vector: ({:.3f}, {:.3f}, {:.3f})", forward.x, forward.y, forward.z);
+            // LOG_DEBUG("[processCameraMovement] BACKWARD command detected, subtracting forward vector: ({:.3f}, {:.3f}, {:.3f})", forward.x, forward.y, forward.z);
         }
         if (m_game_command & static_cast<unsigned int>(GameCommand::right)) // D键右移
         {
             movement += right;
-            LOG_DEBUG("[processCameraMovement] RIGHT command detected, adding right vector: ({:.3f}, {:.3f}, {:.3f})", right.x, right.y, right.z);
+            // LOG_DEBUG("[processCameraMovement] RIGHT command detected, adding right vector: ({:.3f}, {:.3f}, {:.3f})", right.x, right.y, right.z);
         }
         if (m_game_command & static_cast<unsigned int>(GameCommand::left)) // A键左移
         {
             movement -= right;
-            LOG_DEBUG("[processCameraMovement] LEFT command detected, subtracting right vector: ({:.3f}, {:.3f}, {:.3f})", right.x, right.y, right.z);
+            // LOG_DEBUG("[processCameraMovement] LEFT command detected, subtracting right vector: ({:.3f}, {:.3f}, {:.3f})", right.x, right.y, right.z);
         }
         if (m_game_command & static_cast<unsigned int>(GameCommand::jump))
         {
             movement += up;
-            LOG_DEBUG("[processCameraMovement] JUMP command detected, adding up vector: ({:.3f}, {:.3f}, {:.3f})", up.x, up.y, up.z);
+            // LOG_DEBUG("[processCameraMovement] JUMP command detected, adding up vector: ({:.3f}, {:.3f}, {:.3f})", up.x, up.y, up.z);
         }
         if (m_game_command & static_cast<unsigned int>(GameCommand::squat))
         {
             movement -= up;
-            LOG_DEBUG("[processCameraMovement] SQUAT command detected, subtracting up vector: ({:.3f}, {:.3f}, {:.3f})", up.x, up.y, up.z);
+            // LOG_DEBUG("[processCameraMovement] SQUAT command detected, subtracting up vector: ({:.3f}, {:.3f}, {:.3f})", up.x, up.y, up.z);
         }
         
         // 记录原始移动向量
-        LOG_DEBUG("[processCameraMovement] Raw movement vector: ({:.6f}, {:.6f}, {:.6f}), length: {:.6f}", 
-                  movement.x, movement.y, movement.z, glm::length(movement));
+        // LOG_DEBUG("[processCameraMovement] Raw movement vector: ({:.6f}, {:.6f}, {:.6f}), length: {:.6f}", 
+        //           movement.x, movement.y, movement.z, glm::length(movement));
         
         // 归一化移动向量并应用速度和时间
         if (glm::length(movement) > 0.0f)
@@ -513,29 +531,37 @@ namespace Elish
             movement = glm::normalize(movement) * move_speed * delta_time;
             m_camera_position += movement;
             
-            LOG_DEBUG("[processCameraMovement] [CAMERA_MOVEMENT][{}ms] Position: ({:.3f}, {:.3f}, {:.3f}) -> ({:.3f}, {:.3f}, {:.3f}), Movement: ({:.3f}, {:.3f}, {:.3f})",
-                timestamp, old_position.x, old_position.y, old_position.z,
-                m_camera_position.x, m_camera_position.y, m_camera_position.z,
-                movement.x, movement.y, movement.z);
+            // LOG_DEBUG("[processCameraMovement] [CAMERA_MOVEMENT][{}ms] Position: ({:.3f}, {:.3f}, {:.3f}) -> ({:.3f}, {:.3f}, {:.3f}), Movement: ({:.3f}, {:.3f}, {:.3f})",
+            //     timestamp, old_position.x, old_position.y, old_position.z,
+            //     m_camera_position.x, m_camera_position.y, m_camera_position.z,
+            //     movement.x, movement.y, movement.z);
         }
         else
         {
-            LOG_DEBUG("[processCameraMovement] No movement detected - game_command: 0x{:X}", m_game_command);
+            // LOG_DEBUG("[processCameraMovement] No movement detected - game_command: 0x{:X}", m_game_command);
             
             // 检查是否有按键但没有移动的异常情况
             if (m_game_command != 0)
             {
-                LOG_DEBUG("[processCameraMovement] WARNING: Game command is non-zero (0x{:X}) but no movement calculated!", m_game_command);
+                // LOG_DEBUG("[processCameraMovement] WARNING: Game command is non-zero (0x{:X}) but no movement calculated!", m_game_command);
                 
                 // 详细检查每个命令位
                 if (m_game_command & static_cast<unsigned int>(GameCommand::forward))
-                    LOG_DEBUG("[processCameraMovement] - FORWARD bit is set");
+                {
+                    // LOG_DEBUG("[processCameraMovement] - FORWARD bit is set");
+                }
                 if (m_game_command & static_cast<unsigned int>(GameCommand::backward))
-                    LOG_DEBUG("[processCameraMovement] - BACKWARD bit is set");
+                {
+                    // LOG_DEBUG("[processCameraMovement] - BACKWARD bit is set");
+                }
                 if (m_game_command & static_cast<unsigned int>(GameCommand::left))
-                    LOG_DEBUG("[processCameraMovement] - LEFT bit is set");
+                {
+                    // LOG_DEBUG("[processCameraMovement] - LEFT bit is set");
+                }
                 if (m_game_command & static_cast<unsigned int>(GameCommand::right))
-                    LOG_DEBUG("[processCameraMovement] - RIGHT bit is set");
+                {
+                    // LOG_DEBUG("[processCameraMovement] - RIGHT bit is set");
+                }
             }
         }
     }

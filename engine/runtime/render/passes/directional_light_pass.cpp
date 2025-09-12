@@ -29,6 +29,17 @@ namespace Elish
     void DirectionalLightShadowPass::initialize()
     {
         // LOG_INFO("[DirectionalLightShadowPass] Starting initialize");
+        
+        // 初始化测试四边形相关成员变量
+        m_test_quad_vertex_buffer = nullptr;
+        m_test_quad_vertex_buffer_memory = nullptr;
+        m_test_quad_index_buffer = nullptr;
+        m_test_quad_index_buffer_memory = nullptr;
+        m_test_quad_initialized = false;
+        
+        // 旧的光源系统初始化代码已移除
+        // 现在使用 RenderResource 统一管理光源数据
+        
         // 设置阴影贴图资源
         setupAttachments();
         setupRenderPass();
@@ -130,20 +141,24 @@ namespace Elish
         // 4. 更新uniform buffer
         updateUniformBuffer();
         
-        // 5. 绑定描述符集
+        // 5. 绑定描述符集 - 使用当前帧索引
+        uint8_t currentFrameIndex = m_rhi->getCurrentFrameIndex();
         m_rhi->cmdBindDescriptorSetsPFN(
             m_rhi->getCurrentCommandBuffer(),
             RHI_PIPELINE_BIND_POINT_GRAPHICS,
             m_pipeline_layout,
             0, // first set
             1, // descriptor set count
-            &m_descriptor_set,
+            &m_descriptor_sets[currentFrameIndex], // 🔧 修复：使用对应帧的描述符集
             0, // dynamic offset count
             nullptr // dynamic offsets
         );
         float main_color[4] = { 1.0f, 0.5f, 1.0f, 1.0f };
         m_rhi->pushEvent(m_rhi->getCurrentCommandBuffer(), "DIRECTIONAL LIGHT SHADOW  SUBPASS", main_color);
-        // 6. 渲染模型
+        // 6. 渲染测试四边形（用于调试深度写入）
+        drawTestQuad();
+        
+        // 7. 渲染模型
         drawModel();
         m_rhi->popEvent(m_rhi->getCurrentCommandBuffer());
         // 7. 结束渲染通道
@@ -223,30 +238,31 @@ namespace Elish
             m_shadow_map_image_view          // 输出视图句柄
         );
         
-        // // 创建采样器
-        // RHISamplerCreateInfo sampler_info{};
-        // sampler_info.sType = RHI_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        // sampler_info.magFilter = RHI_FILTER_LINEAR;
-        // sampler_info.minFilter = RHI_FILTER_LINEAR;
-        // sampler_info.addressModeU = RHI_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        // sampler_info.addressModeV = RHI_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        // sampler_info.addressModeW = RHI_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-        // sampler_info.anisotropyEnable = RHI_FALSE;
-        // sampler_info.maxAnisotropy = 1.0f;
-        // sampler_info.borderColor = RHI_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-        // sampler_info.unnormalizedCoordinates = RHI_FALSE;
-        // sampler_info.compareEnable = RHI_TRUE;
-        // sampler_info.compareOp = RHI_COMPARE_OP_LESS_OR_EQUAL;
-        // sampler_info.mipmapMode = RHI_SAMPLER_MIPMAP_MODE_LINEAR;
-        // sampler_info.mipLodBias = 0.0f;
-        // sampler_info.minLod = 0.0f;
-        // sampler_info.maxLod = 1.0f;
+        // 🔍 创建阴影贴图采样器（用于在主渲染通道中采样阴影贴图）
+        // 🌟 优化采样器配置以增强阴影对比度
+        RHISamplerCreateInfo sampler_info{};
+        sampler_info.sType = RHI_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        sampler_info.magFilter = RHI_FILTER_LINEAR;                    // 线性放大过滤
+        sampler_info.minFilter = RHI_FILTER_LINEAR;                    // 线性缩小过滤
+        sampler_info.addressModeU = RHI_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;  // U方向边界夹紧
+        sampler_info.addressModeV = RHI_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;  // V方向边界夹紧
+        sampler_info.addressModeW = RHI_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;  // W方向边界夹紧
+        sampler_info.anisotropyEnable = RHI_FALSE;                     // 禁用各向异性过滤
+        sampler_info.maxAnisotropy = 1.0f;
+        sampler_info.borderColor = RHI_BORDER_COLOR_FLOAT_OPAQUE_WHITE; // 🔧 修复：白色边界表示无阴影区域
+        sampler_info.unnormalizedCoordinates = RHI_FALSE;              // 使用标准化坐标
+        sampler_info.compareEnable = RHI_TRUE;                         // 启用深度比较（阴影映射必需）
+        sampler_info.compareOp = RHI_COMPARE_OP_LESS;                  // 🔧 修复：与管线深度比较操作一致
+        sampler_info.mipmapMode = RHI_SAMPLER_MIPMAP_MODE_LINEAR;
+        sampler_info.mipLodBias = 0.0f;
+        sampler_info.minLod = 0.0f;
+        sampler_info.maxLod = 1.0f;
         
-        // if (rhi->createSampler(&sampler_info, m_shadow_map_sampler) != RHI_SUCCESS)
-        // {
-        //     LOG_ERROR("Failed to create shadow map sampler!");
-        //     return;
-        // }
+        if (rhi->createSampler(&sampler_info, m_shadow_map_sampler) != RHI_SUCCESS)
+        {
+            LOG_ERROR("Failed to create shadow map sampler!");
+            return;
+        }
     }
     
     /**
@@ -273,7 +289,7 @@ namespace Elish
         depth_attachment.stencilLoadOp = RHI_ATTACHMENT_LOAD_OP_DONT_CARE;
         depth_attachment.stencilStoreOp = RHI_ATTACHMENT_STORE_OP_DONT_CARE;
         depth_attachment.initialLayout = RHI_IMAGE_LAYOUT_UNDEFINED;
-        depth_attachment.finalLayout = RHI_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        depth_attachment.finalLayout = RHI_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;  // 🔧 修复：与主渲染Pass期望的布局一致
 
         // 深度附件引用
         RHIAttachmentReference depth_attachment_ref{};
@@ -395,7 +411,7 @@ namespace Elish
         ubo_binding.binding = 0;
         ubo_binding.descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // 修复：使用UNIFORM_BUFFER匹配shader
         ubo_binding.descriptorCount = 1;
-        ubo_binding.stageFlags = RHI_SHADER_STAGE_VERTEX_BIT; // 仅顶点着色器访问
+        ubo_binding.stageFlags = RHI_SHADER_STAGE_VERTEX_BIT | RHI_SHADER_STAGE_FRAGMENT_BIT; // 🔧 修复：允许顶点和片段着色器访问
         ubo_binding.pImmutableSamplers = nullptr;
         
         RHIDescriptorSetLayoutBinding bindings[] = {ubo_binding};
@@ -591,10 +607,11 @@ namespace Elish
         rasterizer.frontFace = RHI_FRONT_FACE_COUNTER_CLOCKWISE;    // 逆时针为正面
         
         // 🔧 深度偏置配置（解决阴影失真问题）
+        // 🌟 优化偏置参数以增强阴影清晰度
         rasterizer.depthBiasEnable = RHI_TRUE;                      // 启用深度偏置
-        rasterizer.depthBiasConstantFactor = 1.25f;                 // 常量偏置因子（减少阴影痤疮）
+        rasterizer.depthBiasConstantFactor = 1.25f;                 // 优化常量偏置，减少阴影痤疮
         rasterizer.depthBiasClamp = 0.0f;                           // 无偏置夹紧
-        rasterizer.depthBiasSlopeFactor = 1.75f;                    // 斜率偏置因子（处理斜面阴影）
+        rasterizer.depthBiasSlopeFactor = 1.75f;                    // 优化斜率偏置，改善倾斜表面阴影
         
         // 💡 深度偏置参数说明：
         // - constantFactor: 解决平面上的阴影痤疮（shadow acne）
@@ -612,7 +629,7 @@ namespace Elish
         depth_stencil.sType = RHI_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depth_stencil.depthTestEnable = RHI_TRUE;                   // 启用深度测试（必须）
         depth_stencil.depthWriteEnable = RHI_TRUE;                  // 启用深度写入（生成阴影贴图）
-        depth_stencil.depthCompareOp = RHI_COMPARE_OP_LESS;         // 深度比较：更近的片段通过
+        depth_stencil.depthCompareOp = RHI_COMPARE_OP_LESS;         // 🔧 修复：使用LESS比较操作提高深度精度
         depth_stencil.depthBoundsTestEnable = RHI_FALSE;            // 禁用深度边界测试
         depth_stencil.stencilTestEnable = RHI_FALSE;                // 禁用模板测试（阴影不需要）
         
@@ -712,32 +729,35 @@ namespace Elish
             return;
         }
         
-        // 创建描述符池
+        // 创建描述符池 - 支持多帧并发
         RHIDescriptorPoolSize pool_sizes[1];
-        pool_sizes[0].type = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // 修复：匹配描述符布局类型
-        pool_sizes[0].descriptorCount = 1; // 修复：只有一个UBO
+        pool_sizes[0].type = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        pool_sizes[0].descriptorCount = 3; // 🔧 修复：为3个飞行帧各创建一个UBO描述符
         
         RHIDescriptorPoolCreateInfo pool_create_info{};
         pool_create_info.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         pool_create_info.poolSizeCount = 1;
         pool_create_info.pPoolSizes = pool_sizes;
-        pool_create_info.maxSets = 1;
+        pool_create_info.maxSets = 3; // 🔧 修复：支持3个描述符集
         
         if (m_rhi->createDescriptorPool(&pool_create_info, m_descriptor_pool) != RHI_SUCCESS) {
             LOG_ERROR("[DirectionalLightShadowPass] Failed to create descriptor pool");
             return;
         }
         
-        // 分配描述符集
+        // 分配描述符集 - 为每个飞行帧分配独立描述符集
         RHIDescriptorSetAllocateInfo alloc_info{};
         alloc_info.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         alloc_info.descriptorPool = m_descriptor_pool;
-        alloc_info.descriptorSetCount = 1;
+        alloc_info.descriptorSetCount = 1; // 每次分配一个描述符集
         alloc_info.pSetLayouts = &m_descriptor_set_layout;
         
-        if (m_rhi->allocateDescriptorSets(&alloc_info, m_descriptor_set) != RHI_SUCCESS) {
-            LOG_ERROR("[DirectionalLightShadowPass] Failed to allocate descriptor sets");
-            return;
+        // 为每个飞行帧分配描述符集
+        for (int i = 0; i < 3; ++i) {
+            if (m_rhi->allocateDescriptorSets(&alloc_info, m_descriptor_sets[i]) != RHI_SUCCESS) {
+                LOG_ERROR("[DirectionalLightShadowPass] Failed to allocate descriptor set for frame %d", i);
+                return;
+            }
         }
         
         // 注意：描述符集的实际更新将在draw()方法中的updateUniformBuffer()中进行
@@ -773,8 +793,6 @@ namespace Elish
             return;
         }
         
-        
-        
         // 注意：uniform buffer更新和描述符集绑定已在draw()方法中完成
         // 这里只需要进行模型渲染
         
@@ -783,7 +801,6 @@ namespace Elish
         // 渲染每个模型
         for (size_t i = 0; i < render_objects.size(); ++i) {
             const auto& render_object = render_objects[i];
-            
             // 验证渲染对象的有效性
             if (!render_object.vertexBuffer) {
                 LOG_WARN("[DirectionalLightShadowPass] Object {} has no vertex buffer, skipping", i);
@@ -872,28 +889,164 @@ namespace Elish
      * @note 正交投影的尺寸和近远平面需要根据场景大小调整
      * @note 未来可扩展为从渲染资源中动态获取光源参数
      */
+    /**
+     * @brief 根据光源点坐标和场景观察点坐标计算阴影效果所需的各项参数
+     * @details 该函数实现了完整的阴影参数计算系统，包括：
+     *          1. 光源方向向量：从观察点指向光源的归一化向量
+     *          2. 阴影投影矩阵：基于光源位置和观察点构建的阴影投影变换矩阵
+     *          3. 阴影映射范围：确定阴影贴图需要覆盖的场景区域范围
+     *          4. 深度偏移量：防止阴影自相交所需的适当偏移值
+     * @param render_resource 渲染资源，用于获取场景信息
+     */
     void DirectionalLightShadowPass::updateLightMatrix(std::shared_ptr<RenderResource> render_resource)
     {
-        // 获取主方向光信息
-        // 这里需要从渲染资源中获取光源信息
-        // 暂时使用固定的光源方向和位置
+        // ===== 核心坐标定义 =====
+        // 🎯 光源数据 - 从 RenderResource 获取主方向光源数据
+        const auto* primary_light = render_resource->getPrimaryDirectionalLight();
+        if (!primary_light) {
+            LOG_WARN("[Shadow] No primary directional light found, using default values");
+            return;
+        }
         
-        glm::vec3 light_direction = glm::normalize(glm::vec3(0.5f, -1.0f, 0.3f));
-        glm::vec3 light_position = -light_direction * 50.0f; // 光源距离场景中心50个单位
+        // 从光源数据获取方向和计算位置
+        glm::vec3 light_direction = glm::normalize(primary_light->direction);
+        // 对于方向光，我们需要计算一个合适的位置来生成阴影
+        glm::vec3 scene_center = glm::vec3(0.0f, 0.0f, 0.0f);
+        float light_distance = primary_light->distance; // 使用光源数据中的距离参数
+        glm::vec3 light_world_position = scene_center - light_direction * light_distance;
         
-        // 创建光源视图矩阵
-        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-        glm::mat4 light_view = glm::lookAt(light_position, glm::vec3(0.0f, 0.0f, 0.0f), up);
+        LOG_DEBUG("[Shadow] Using light data: Position ({:.2f}, {:.2f}, {:.2f}), Direction ({:.2f}, {:.2f}, {:.2f})", 
+                 light_world_position.x, light_world_position.y, light_world_position.z,
+                 light_direction.x, light_direction.y, light_direction.z);
         
-        // 创建正交投影矩阵（方向光使用正交投影）
-        float ortho_size = 30.0f; // 阴影覆盖范围
-        float near_plane = 1.0f;
-        float far_plane = 100.0f;
-        glm::mat4 light_projection = glm::ortho(-ortho_size, ortho_size, -ortho_size, ortho_size, near_plane, far_plane);
+        // ===== 1. 基础向量和距离计算 =====
+        // 从光源指向场景中心的向量（用于阴影投射）
+        glm::vec3 light_to_scene = scene_center - light_world_position;
+        glm::vec3 shadow_cast_direction = glm::normalize(light_to_scene);
         
-        // 计算光源投影视图矩阵
-        m_light_proj_view_matrix = light_projection * light_view;
+        // 计算光源到场景中心的距离
+        float distance_light_to_scene = glm::length(light_to_scene);
+        
+        // 基于两个坐标计算场景覆盖半径（使用光源到场景中心距离的合理比例）
+        float scene_coverage_radius = distance_light_to_scene * 1.8f; // 基于距离的动态半径
+        
+        // LOG_INFO("[Shadow] 1. Basic Calculations:");
+        // LOG_INFO("[Shadow]    Light Position: ({:.2f}, {:.2f}, {:.2f})", 
+        //          light_world_position.x, light_world_position.y, light_world_position.z);
+        // LOG_INFO("[Shadow]    Scene Center: ({:.2f}, {:.2f}, {:.2f})", 
+        //          scene_center.x, scene_center.y, scene_center.z);
+        // LOG_INFO("[Shadow]    Distance Light->Scene: {:.2f}", distance_light_to_scene);
+        // LOG_INFO("[Shadow]    Scene Coverage Radius: {:.2f}", scene_coverage_radius);
+        
+        // ===== 2. 阴影投影矩阵计算 =====
+        // 创建光源视图矩阵：从光源位置看向场景中心
+        glm::vec3 up_vector = glm::vec3(0.0f, 1.0f, 0.0f);
+        
+        // 确保up向量与光源方向不平行
+        if (glm::abs(glm::dot(shadow_cast_direction, up_vector)) > 0.99f) {
+            up_vector = glm::vec3(1.0f, 0.0f, 0.0f); // 使用替代up向量
+        }
+        
+        glm::vec3 light_target = light_world_position + shadow_cast_direction;
+        glm::mat4 light_view_matrix = glm::lookAt(light_world_position, light_target, up_vector);
+        
+        // LOG_INFO("[Shadow] 2. Shadow Projection Matrix:");
+        // LOG_INFO("[Shadow]    Light Target: ({:.3f}, {:.3f}, {:.3f})", 
+        //          light_target.x, light_target.y, light_target.z);
+        // LOG_INFO("[Shadow]    Up Vector: ({:.3f}, {:.3f}, {:.3f})", 
+        //          up_vector.x, up_vector.y, up_vector.z);
+        
+        // ===== 3. 阴影映射范围计算 =====
+        // 基于光源和场景中心坐标计算阴影覆盖范围
+        float base_scene_radius = 20.0f; // 基础场景半径
+        
+        // 根据光源距离调整覆盖范围
+        float distance_factor = glm::clamp(primary_light->distance / 20.0f, 0.8f, 3.0f); // 使用光源距离参数
+        float shadow_coverage_radius = base_scene_radius * distance_factor;
+        
+        // 使用场景覆盖半径和阴影覆盖半径的最大值确保完整覆盖
+        float extended_radius = std::max(shadow_coverage_radius, scene_coverage_radius * 1.2f);
+        
+        // 正交投影参数
+        float ortho_left = -extended_radius;
+        float ortho_right = extended_radius;
+        float ortho_bottom = -extended_radius;
+        float ortho_top = extended_radius;
+        
+        // 根据光源距离动态调整近/远平面参数
+        float ortho_near = std::max(0.1f, primary_light->distance * 0.1f); // 近平面：距离的10%，最小0.1f
+        float ortho_far = primary_light->distance + extended_radius * 2.0f; // 远平面：基于光源距离而非场景距离
+        
+        // LOG_INFO("[Shadow] 3. Shadow Mapping Range:");
+        // LOG_INFO("[Shadow]    Base Scene Radius: {:.2f}", base_scene_radius);
+        // LOG_INFO("[Shadow]    Distance Factor: {:.3f}", distance_factor);
+        // LOG_INFO("[Shadow]    Shadow Coverage Radius: {:.2f}", shadow_coverage_radius);
+        // LOG_INFO("[Shadow]    Extended Radius: {:.2f}", extended_radius);
+        // LOG_INFO("[Shadow]    Ortho Bounds: L={:.1f}, R={:.1f}, B={:.1f}, T={:.1f}", 
+        //          ortho_left, ortho_right, ortho_bottom, ortho_top);
+        // LOG_INFO("[Shadow]    Depth Range: Near={:.2f}, Far={:.2f}", ortho_near, ortho_far);
+        
+        // 创建正交投影矩阵
+        glm::mat4 light_projection_matrix = glm::ortho(ortho_left, ortho_right, 
+                                                       ortho_bottom, ortho_top, 
+                                                       ortho_near, ortho_far);
+        
+        // ===== 4. 深度偏移量计算 =====
+        // 根据光源角度和距离计算适当的深度偏移，防止阴影自相交（Shadow Acne）
+        float light_angle_factor = glm::abs(glm::dot(shadow_cast_direction, glm::vec3(0.0f, 1.0f, 0.0f)));
+        
+        // 基础偏移量：角度越小（越斜），偏移量越大
+        float base_bias = 0.005f;
+        float angle_bias = base_bias * (1.0f - light_angle_factor) * 2.0f;
+        
+        // 距离偏移量：距离越远，偏移量越大
+        float distance_bias = base_bias * (distance_light_to_scene / 50.0f);
+        
+        // 最终深度偏移量
+        float depth_bias = glm::clamp(angle_bias + distance_bias, 0.001f, 0.02f);
+        
+        // 斜率偏移量（Slope Scale Bias）
+        float slope_bias = glm::clamp(2.0f * (1.0f - light_angle_factor), 0.5f, 4.0f);
+        
+        // LOG_INFO("[Shadow] 4. Depth Bias Calculation:");
+        // LOG_INFO("[Shadow]    Light Angle Factor: {:.3f}", light_angle_factor);
+        // LOG_INFO("[Shadow]    Angle Bias: {:.6f}", angle_bias);
+        // LOG_INFO("[Shadow]    Distance Bias: {:.6f}", distance_bias);
+        // LOG_INFO("[Shadow]    Final Depth Bias: {:.6f}", depth_bias);
+        // LOG_INFO("[Shadow]    Slope Scale Bias: {:.3f}", slope_bias);
+        
+        // ===== 最终矩阵计算和验证 =====
+        // 计算最终的光源投影视图矩阵
+        m_light_proj_view_matrix = light_projection_matrix * light_view_matrix;
+        
+        // 验证矩阵有效性
+        float matrix_determinant = glm::determinant(m_light_proj_view_matrix);
+        if (std::abs(matrix_determinant) < 1e-6f) {
+            LOG_ERROR("[Shadow] Invalid light projection-view matrix (determinant={:.8f})!", matrix_determinant);
+        } else {
+            // LOG_INFO("[Shadow] Shadow matrix calculation completed successfully");
+            // LOG_INFO("[Shadow] Matrix determinant: {:.8f}", matrix_determinant);
+        }
+        
+        // ===== 参数存储和传递 =====
+        // 存储计算出的关键参数供渲染管线使用
+        // - depth_bias 和 slope_bias: 传递给光栅化状态防止阴影痤疮
+        // - shadow_cast_direction: 光源方向向量，传递给光照着色器
+        // - extended_radius: 阴影覆盖范围，用于优化阴影贴图分辨率
+        // - light_world_position: 光源世界坐标，用于光照计算
+        
+        // LOG_INFO("[Shadow] Final Parameters Summary:");
+        // LOG_INFO("[Shadow]    Shadow Direction: ({:.3f}, {:.3f}, {:.3f})", 
+        //          shadow_cast_direction.x, shadow_cast_direction.y, shadow_cast_direction.z);
+        // LOG_INFO("[Shadow]    Extended Radius: {:.2f}", extended_radius);
+        // LOG_INFO("[Shadow]    Depth Bias: {:.6f}, Slope Bias: {:.3f}", depth_bias, slope_bias);
+        
+        // LOG_INFO("[Shadow] === Shadow Parameter Calculation Complete ===");
     }
+    
+    // 旧的光源系统方法已移除，现在使用 RenderResource 管理光源
+    
+    // 旧的兼容性光源接口已移除
     
     /**
      * @brief 高效更新阴影渲染缓冲区数据
@@ -930,45 +1083,66 @@ namespace Elish
         
         const auto& render_objects = m_current_render_resource->getLoadedRenderObjects();
         
-        // 📊 准备UBO数据，匹配shadow.vert shader中的ubo定义
-        struct ShadowUBO {
-            glm::mat4 view;   // 视图矩阵（光源视角）
-            glm::mat4 proj;   // 投影矩阵（光源投影）
-        } ubo_data;
+        // 📊 修复：使用正确的UBO结构，匹配着色器定义（两个独立矩阵）
+        ShadowUniformBufferObject ubo_data;
         
-        // 🎯 设置UBO数据
-        // 从光源投影视图矩阵中分离视图和投影矩阵
-        // 注意：这里简化处理，实际应用中可能需要分别计算
-        ubo_data.view = glm::mat4(1.0f);   // 简化：使用单位矩阵
-        ubo_data.proj = m_light_proj_view_matrix; // 使用完整的投影视图矩阵
+        // 🎯 设置UBO数据：使用RenderResource中的实际光源数据
+        // 获取主方向光源数据
+        const DirectionalLightData* primary_light = m_current_render_resource->getPrimaryDirectionalLight();
+        if (!primary_light) {
+            LOG_ERROR("[DirectionalLightShadowPass] No primary directional light available");
+            return;
+        }
+        
+        glm::vec3 light_direction = glm::normalize(primary_light->direction);
+        glm::vec3 scene_center = glm::vec3(0.0f, 0.0f, 0.0f);
+        float scene_radius = 50.0f;
+        glm::vec3 light_position = scene_center - light_direction * (scene_radius * 2.0f);
+        
+        // 创建独立的视图和投影矩阵
+        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 target = light_position + light_direction;
+        ubo_data.view = glm::lookAt(light_position, target, up);
+        
+        float ortho_size = scene_radius * 1.5f;
+        float near_plane = 1.0f;
+        float far_plane = scene_radius * 4.0f;
+        ubo_data.proj = glm::ortho(-ortho_size, ortho_size, -ortho_size, ortho_size, near_plane, far_plane);
+        
+        // LOG_DEBUG("[Shadow] UBO Update - View matrix determinant: {:.6f}", glm::determinant(ubo_data.view));
+        // LOG_DEBUG("[Shadow] UBO Update - Proj matrix determinant: {:.6f}", glm::determinant(ubo_data.proj));
         
         // 🔗 高效缓冲区数据更新（使用内存映射）
         if (m_global_uniform_buffer) {
             // 📊 更新UBO缓冲区（包含view, proj矩阵）
             void* ubo_mapped_data;
-            m_rhi->mapMemory(m_global_uniform_buffer_memory, 0, sizeof(ShadowUBO), 0, &ubo_mapped_data);
-            memcpy(ubo_mapped_data, &ubo_data, sizeof(ShadowUBO));
+            m_rhi->mapMemory(m_global_uniform_buffer_memory, 0, sizeof(ShadowUniformBufferObject), 0, &ubo_mapped_data);
+            memcpy(ubo_mapped_data, &ubo_data, sizeof(ShadowUniformBufferObject));
             m_rhi->unmapMemory(m_global_uniform_buffer_memory);
             
             // 🎯 配置描述符缓冲区信息（绑定UBO到着色器）
             RHIDescriptorBufferInfo ubo_buffer_info{};
             ubo_buffer_info.buffer = m_global_uniform_buffer;           // UBO缓冲区句柄
             ubo_buffer_info.offset = 0;                                // 从缓冲区开始位置
-            ubo_buffer_info.range = sizeof(ShadowUBO);                 // UBO缓冲区大小
+            ubo_buffer_info.range = sizeof(ShadowUniformBufferObject); // UBO缓冲区大小
             
-            // 🔗 描述符集更新
-            RHIWriteDescriptorSet descriptor_write{};
+            // 🔗 描述符集更新 - 只更新当前帧的描述符集，避免更新正在使用的描述符集
+            uint32_t currentFrameIndex = m_rhi->getCurrentFrameIndex();
             
+            RHIWriteDescriptorSet descriptor_write;
             // Binding 0: UBO → shader中的uniformbuffer (ubo)
             descriptor_write.sType = RHI_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptor_write.dstSet = m_descriptor_set;
+            descriptor_write.pNext = nullptr; // 🔧 修复：正确初始化pNext字段
+            descriptor_write.dstSet = m_descriptor_sets[currentFrameIndex]; // 🔧 修复：只使用当前帧的描述符集
             descriptor_write.dstBinding = 0;                            // 对应shader binding 0
             descriptor_write.dstArrayElement = 0;
-            descriptor_write.descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // 修复：使用UNIFORM_BUFFER
+            descriptor_write.descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             descriptor_write.descriptorCount = 1;
             descriptor_write.pBufferInfo = &ubo_buffer_info;
+            descriptor_write.pImageInfo = nullptr; // 🔧 修复：初始化未使用的字段
+            descriptor_write.pTexelBufferView = nullptr; // 🔧 修复：初始化未使用的字段
             
-            // 🚀 执行描述符更新
+            // 🚀 执行描述符更新 - 只更新当前帧的描述符集
             m_rhi->updateDescriptorSets(1, &descriptor_write, 0, nullptr);
         }
         
@@ -992,6 +1166,122 @@ namespace Elish
         // 阴影贴图通常不依赖于交换链大小，所以这里可能不需要重建
         // 但如果需要根据屏幕分辨率调整阴影贴图大小，可以在这里实现
         
+    }
+    
+    /**
+     * @brief 渲染测试四边形用于调试Shadow Pass深度写入
+     * @details 该函数渲染一个简单的四边形到阴影贴图，用于验证深度写入是否正常工作：
+     *          1. 检查深度测试和深度写入是否启用
+     *          2. 验证光源变换矩阵是否正确
+     *          3. 确认几何体是否在光源视锥内
+     *          4. 测试深度值是否被正确写入阴影贴图
+     * @note 这是一个调试功能，用于排查深度值始终为1的问题
+     */
+    void DirectionalLightShadowPass::drawTestQuad()
+    {
+        if (!m_test_quad_initialized) {
+            initializeTestQuad();
+        }
+        
+        // 绑定测试四边形的顶点缓冲区
+        RHIBuffer* vertex_buffers[] = {m_test_quad_vertex_buffer};
+        RHIDeviceSize offsets[] = {0};
+        m_rhi->cmdBindVertexBuffersPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, vertex_buffers, offsets);
+        
+        // 绑定索引缓冲区
+        m_rhi->cmdBindIndexBufferPFN(m_rhi->getCurrentCommandBuffer(), m_test_quad_index_buffer, 0, RHI_INDEX_TYPE_UINT16);
+        
+        // 设置模型矩阵（将四边形放置在光源视锥内的合适位置）
+        glm::mat4 model_matrix = glm::mat4(1.0f);
+        model_matrix = glm::translate(model_matrix, glm::vec3(0.0f, 0.0f, -10.0f)); // 放在光源前方
+        model_matrix = glm::scale(model_matrix, glm::vec3(5.0f, 5.0f, 1.0f)); // 适当缩放
+        
+        // 推送模型矩阵到着色器
+        m_rhi->cmdPushConstantsPFN(
+            m_rhi->getCurrentCommandBuffer(),
+            m_pipeline_layout,
+            RHI_SHADER_STAGE_VERTEX_BIT,
+            0,
+            sizeof(glm::mat4),
+            &model_matrix
+        );
+        
+        // 绘制测试四边形
+        m_rhi->cmdDrawIndexedPFN(m_rhi->getCurrentCommandBuffer(), 6, 1, 0, 0, 0);
+        
+        // LOG_INFO("[Shadow Debug] Test quad rendered for depth testing");
+    }
+    
+    /**
+     * @brief 初始化测试四边形的几何数据
+     * @details 创建一个简单的四边形用于测试深度写入功能：
+     *          - 顶点数据：位置、法线、颜色、纹理坐标
+     *          - 索引数据：两个三角形组成四边形
+     *          - 缓冲区：顶点缓冲区和索引缓冲区
+     * @note 这个四边形专门用于调试Shadow Pass的深度写入问题
+     */
+    void DirectionalLightShadowPass::initializeTestQuad()
+    {
+        std::shared_ptr<RHI> rhi = g_runtime_global_context.m_render_system->getRHI();
+        
+        // 定义测试四边形顶点数据（匹配shadow.vert的输入格式）
+        struct TestVertex {
+            glm::vec3 position;
+            glm::vec3 normal;
+            glm::vec3 color;
+            glm::vec2 texCoord;
+        };
+        
+        // 创建一个简单的四边形（在XY平面上）
+        TestVertex vertices[] = {
+            // 位置                法线              颜色              纹理坐标
+            {{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}}, // 左下
+            {{ 1.0f, -1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}}, // 右下
+            {{ 1.0f,  1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}}, // 右上
+            {{-1.0f,  1.0f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f}}  // 左上
+        };
+        
+        // 索引数据（两个三角形组成四边形）
+        uint16_t indices[] = {
+            0, 1, 2,  // 第一个三角形
+            2, 3, 0   // 第二个三角形
+        };
+        
+        // 创建顶点缓冲区
+        RHIDeviceSize vertex_buffer_size = sizeof(vertices);
+        rhi->createBuffer(
+            vertex_buffer_size,
+            RHI_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            RHI_MEMORY_PROPERTY_HOST_VISIBLE_BIT | RHI_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_test_quad_vertex_buffer,
+            m_test_quad_vertex_buffer_memory
+        );
+        
+        // 复制顶点数据到缓冲区
+        void* vertex_data;
+        rhi->mapMemory(m_test_quad_vertex_buffer_memory, 0, vertex_buffer_size, 0, &vertex_data);
+        memcpy(vertex_data, vertices, vertex_buffer_size);
+        rhi->unmapMemory(m_test_quad_vertex_buffer_memory);
+        
+        // 创建索引缓冲区
+        RHIDeviceSize index_buffer_size = sizeof(indices);
+        rhi->createBuffer(
+            index_buffer_size,
+            RHI_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            RHI_MEMORY_PROPERTY_HOST_VISIBLE_BIT | RHI_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_test_quad_index_buffer,
+            m_test_quad_index_buffer_memory
+        );
+        
+        // 复制索引数据到缓冲区
+        void* index_data;
+        rhi->mapMemory(m_test_quad_index_buffer_memory, 0, index_buffer_size, 0, &index_data);
+        memcpy(index_data, indices, index_buffer_size);
+        rhi->unmapMemory(m_test_quad_index_buffer_memory);
+        
+        m_test_quad_initialized = true;
+        
+        // LOG_INFO("[Shadow Debug] Test quad geometry initialized for depth testing");
     }
     
 } // namespace Elish

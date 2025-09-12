@@ -29,6 +29,18 @@ namespace Elish
          * @return 主相机渲染通道的共享指针
          */
         std::shared_ptr<RenderPassBase> getMainCameraPass() const { return m_main_camera_pass; }
+        
+        /**
+         * @brief 启用或禁用光线追踪
+         * @param enabled 是否启用光线追踪
+         */
+        virtual void setRayTracingEnabled(bool enabled) {}
+        
+        /**
+         * @brief 获取光线追踪启用状态
+         * @return 是否启用光线追踪
+         */
+        virtual bool isRayTracingEnabled() const { return false; }
 
     protected:
         std::shared_ptr<RHI> m_rhi;

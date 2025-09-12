@@ -1,44 +1,202 @@
-#define PI 3.1416
+// ============================================================================
+// PBR (基于物理的渲染) 核心数学常量和函数库
+// 实现基于微表面理论的BRDF模型，包含GGX法线分布、Smith几何函数和Schlick菲涅尔近似
+// ============================================================================
 
-// todo: param/const
+#define PI 3.1416  // 圆周率，用于各种光照计算中的积分和概率密度函数
+
+// IBL (基于图像的光照) 最大反射LOD级别
+// 用于粗糙度到mipmap级别的映射，控制环境反射的模糊程度
 #define MAX_REFLECTION_LOD 8.0
 
-// Normal Distribution function --------------------------------------
+// ============================================================================
+// GGX/Trowbridge-Reitz 法线分布函数 (Normal Distribution Function)
+// ============================================================================
+/**
+ * @brief GGX法线分布函数 - 微表面理论的核心组件
+ * @details 描述微表面法线在给定方向上的分布概率密度
+ *          
+ *          数学公式：D(h) = α² / (π * ((n·h)² * (α² - 1) + 1)²)
+ *          其中：
+ *          - α = roughness² (线性粗糙度的平方)
+ *          - n·h = 法线与半角向量的点积
+ *          - h = normalize(v + l) (半角向量)
+ *          
+ *          物理意义：
+ *          - 当roughness = 0时，所有微表面法线都指向宏观法线方向（完美镜面）
+ *          - 当roughness = 1时，微表面法线分布更加随机（完全粗糙表面）
+ *          - 该函数确保能量守恒，积分结果为1
+ *          
+ * @param dotNH 法线与半角向量的点积 [0,1]
+ * @param roughness 表面粗糙度参数 [0,1]
+ * @return 法线分布概率密度值
+ */
 highp float D_GGX(highp float dotNH, highp float roughness)
 {
+    // α = roughness²，这是GGX分布的标准参数化
+    // 使用平方是为了提供更直观的粗糙度控制
     highp float alpha  = roughness * roughness;
     highp float alpha2 = alpha * alpha;
+    
+    // 分母计算：(n·h)² * (α² - 1) + 1
+    // 这个形式确保了当dotNH=1且roughness=0时，分母为1，分子为α²=0，结果趋向于无穷大（完美镜面反射）
     highp float denom  = dotNH * dotNH * (alpha2 - 1.0) + 1.0;
+    
+    // 最终的GGX分布公式：α² / (π * denom²)
     return (alpha2) / (PI * denom * denom);
 }
 
-// Geometric Shadowing function --------------------------------------
+// ============================================================================
+// Smith几何遮蔽函数 (Geometric Shadowing Function)
+// ============================================================================
+/**
+ * @brief Smith几何遮蔽函数 - 计算微表面间的相互遮蔽和阴影
+ * @details 该函数模拟微表面几何结构导致的光线遮蔽效应
+ *          
+ *          理论基础：
+ *          - 微表面不是完全平坦的，存在高度变化
+ *          - 当光线或视线与表面夹角较大时，会被相邻微表面遮挡
+ *          - Smith模型将遮蔽和阴影分别计算，然后组合
+ *          
+ *          数学公式：G(l,v,h) = G₁(l) * G₁(v)
+ *          其中：G₁(x) = x / (x * (1 - k) + k)
+ *          k = (roughness + 1)² / 8  (直接光照的重映射)
+ *          
+ *          物理意义：
+ *          - G₁(l)：光线方向的遮蔽因子（阴影遮蔽）
+ *          - G₁(v)：视线方向的遮蔽因子（几何遮蔽）
+ *          - 粗糙表面的遮蔽效应更强，光滑表面遮蔽较少
+ *          
+ * @param dotNL 法线与光源方向的点积 [0,1]
+ * @param dotNV 法线与视线方向的点积 [0,1]
+ * @param roughness 表面粗糙度参数 [0,1]
+ * @return 几何遮蔽因子 [0,1]
+ */
 highp float G_SchlicksmithGGX(highp float dotNL, highp float dotNV, highp float roughness)
 {
+    // 重映射粗糙度参数，用于直接光照
+    // 这个重映射是为了更好地匹配真实的微表面分布
     highp float r  = (roughness + 1.0);
-    highp float k  = (r * r) / 8.0;
+    highp float k  = (r * r) / 8.0;  // k = (α + 1)² / 8，其中α = roughness
+    
+    // 计算光线方向的几何遮蔽因子
+    // GL表示从光源方向看到的微表面可见性
     highp float GL = dotNL / (dotNL * (1.0 - k) + k);
+    
+    // 计算视线方向的几何遮蔽因子
+    // GV表示从观察者方向看到的微表面可见性
     highp float GV = dotNV / (dotNV * (1.0 - k) + k);
+    
+    // Smith模型：将两个方向的遮蔽因子相乘
+    // 这假设光线和视线方向的遮蔽是相互独立的
     return GL * GV;
 }
 
-// Fresnel function ----------------------------------------------------
+// ============================================================================
+// 菲涅尔反射函数 (Fresnel Reflection Function)
+// ============================================================================
+
+/**
+ * @brief 高效的五次幂计算函数
+ * @details 用于Schlick菲涅尔近似中的(1-cosθ)⁵计算
+ *          通过连续乘法避免使用pow()函数，提高性能
+ * @param x 输入值
+ * @return x的五次幂
+ */
 highp float Pow5(highp float x)
 {
+    // 使用连续乘法计算x⁵，比pow(x, 5.0)更高效
     return (x * x * x * x * x);
 }
 
+/**
+ * @brief Schlick菲涅尔近似 - 计算表面反射率
+ * @details 菲涅尔效应描述了光线在不同介质界面的反射和折射行为
+ *          
+ *          物理背景：
+ *          - 当光线从一种介质进入另一种介质时，部分光线被反射，部分被折射
+ *          - 反射的比例取决于入射角度和两种介质的折射率
+ *          - 垂直入射时反射最少，掠射角入射时反射接近100%
+ *          
+ *          Schlick近似公式：F(θ) = F₀ + (1 - F₀) * (1 - cosθ)⁵
+ *          其中：
+ *          - F₀：垂直入射时的反射率（材质的基础反射率）
+ *          - θ：入射角（光线与表面法线的夹角）
+ *          - cosθ：通常是视线方向与半角向量的点积
+ *          
+ *          材质F₀参考值：
+ *          - 电介质（非金属）：0.02-0.05（约4%反射率）
+ *          - 金属：0.5-1.0（高反射率，有颜色）
+ *          
+ * @param cosTheta 入射角的余弦值 [0,1]
+ * @param F0 材质的基础反射率（垂直入射时的反射率）
+ * @return 当前角度下的菲涅尔反射率
+ */
 highp vec3 F_Schlick(highp float cosTheta, highp vec3 F0) 
 { 
+    // Schlick近似：F₀ + (1 - F₀) * (1 - cosθ)⁵
+    // 当cosTheta接近1（垂直入射）时，结果接近F₀
+    // 当cosTheta接近0（掠射角）时，结果接近1（完全反射）
     return F0 + (1.0 - F0) * Pow5(1.0 - cosTheta); 
-    }
+}
 
+/**
+ * @brief 考虑粗糙度的Schlick菲涅尔近似
+ * @details 在IBL（基于图像的光照）中使用，粗糙度会影响菲涅尔效应
+ *          
+ *          粗糙度修正：
+ *          - 粗糙表面的菲涅尔效应会被"平均化"
+ *          - 使用max(1-roughness, F₀)替代原始的1.0作为最大反射率
+ *          - 这样可以更准确地模拟粗糙表面的反射行为
+ *          
+ * @param cosTheta 入射角的余弦值 [0,1]
+ * @param F0 材质的基础反射率
+ * @param roughness 表面粗糙度 [0,1]
+ * @return 考虑粗糙度修正的菲涅尔反射率
+ */
 highp vec3 F_SchlickR(highp float cosTheta, highp vec3 F0, highp float roughness)
 {
+    // 粗糙度修正的菲涅尔近似
+    // 使用max(1-roughness, F₀)来限制最大反射率
+    // 这样粗糙表面在掠射角下不会产生过强的反射
     return F0 + (max(vec3(1.0 - roughness, 1.0 - roughness, 1.0 - roughness), F0) - F0) * Pow5(1.0 - cosTheta);
 }
 
-// Specular and diffuse BRDF composition --------------------------------------------
+// ============================================================================
+// 完整的BRDF函数 - 基于物理的双向反射分布函数
+// ============================================================================
+/**
+ * @brief 完整的PBR BRDF实现 - 结合漫反射和镜面反射
+ * @details 实现基于微表面理论的完整BRDF模型，包含：
+ *          1. 镜面反射项：Cook-Torrance微表面模型
+ *          2. 漫反射项：Lambertian漫反射模型
+ *          3. 能量守恒：确保反射和折射能量总和不超过入射能量
+ *          
+ *          渲染方程基础：
+ *          Lo(p,ωo) = ∫Ω fr(p,ωi,ωo) * Li(p,ωi) * (n·ωi) dωi
+ *          
+ *          BRDF分解：
+ *          fr(p,ωi,ωo) = kd * fd(p,ωi,ωo) + ks * fs(p,ωi,ωo)
+ *          其中：
+ *          - kd：漫反射权重（能量分配给漫反射的比例）
+ *          - ks：镜面反射权重（能量分配给镜面反射的比例）
+ *          - fd：漫反射BRDF（Lambertian：basecolor/π）
+ *          - fs：镜面反射BRDF（Cook-Torrance：D*G*F/(4*(n·l)*(n·v))）
+ *          
+ *          金属度工作流：
+ *          - 金属材质：kd = 0（无漫反射），ks = 1，F₀ = basecolor
+ *          - 电介质：kd = 1-F，ks = F，F₀ = 0.04
+ *          - 混合材质：通过metallic参数线性插值
+ *          
+ * @param L 光源方向（指向光源的单位向量）
+ * @param V 视线方向（指向观察者的单位向量）
+ * @param N 表面法线（单位向量）
+ * @param F0 材质的基础反射率（垂直入射时的反射率）
+ * @param basecolor 材质的基础颜色（反照率）
+ * @param metallic 金属度参数 [0,1]，0=电介质，1=金属
+ * @param roughness 粗糙度参数 [0,1]，0=完全光滑，1=完全粗糙
+ * @return 该方向上的BRDF值（出射辐射度）
+ */
 highp vec3 BRDF(highp vec3  L,
                 highp vec3  V,
                 highp vec3  N,
@@ -47,36 +205,123 @@ highp vec3 BRDF(highp vec3  L,
                 highp float metallic,
                 highp float roughness)
 {
-    // Precalculate vectors and dot products
+    // ========================================================================
+    // 1. 预计算所有需要的向量和点积
+    // ========================================================================
+    
+    // 半角向量：光线和视线方向的平均值，用于镜面反射计算
     highp vec3  H     = normalize(V + L);
-    highp float dotNV = clamp(dot(N, V), 0.0, 1.0);
-    highp float dotNL = clamp(dot(N, L), 0.0, 1.0);
-    highp float dotLH = clamp(dot(L, H), 0.0, 1.0);
-    highp float dotNH = clamp(dot(N, H), 0.0, 1.0);
+    
+    // 关键点积计算，限制在[0,1]范围内避免负值
+    highp float dotNV = clamp(dot(N, V), 0.0, 1.0);  // 法线与视线夹角余弦
+    highp float dotNL = clamp(dot(N, L), 0.0, 1.0);  // 法线与光线夹角余弦（Lambert项）
+    highp float dotLH = clamp(dot(L, H), 0.0, 1.0);  // 光线与半角向量夹角余弦
+    highp float dotNH = clamp(dot(N, H), 0.0, 1.0);  // 法线与半角向量夹角余弦
 
-    // Light color fixed
-    // vec3 lightColor = vec3(1.0);
-
+    // 初始化输出颜色
     highp vec3 color = vec3(0.0);
 
+    // ========================================================================
+    // 2. 粗糙度处理 - 避免除零和数值不稳定
+    // ========================================================================
+    
+    // 限制最小粗糙度，避免完全镜面导致的数值问题
+    // 0.05是一个经验值，对应非常光滑但仍有微小粗糙度的表面
     highp float rroughness = max(0.05, roughness);
-    // D = Normal distribution (Distribution of the microfacets)
+    
+    // ========================================================================
+    // 3. Cook-Torrance镜面反射BRDF计算
+    // ========================================================================
+    
+    // D项：GGX法线分布函数 - 描述微表面法线分布
     highp float D = D_GGX(dotNH, rroughness);
-    // G = Geometric shadowing term (Microfacets shadowing)
+    
+    // G项：Smith几何遮蔽函数 - 描述微表面间的相互遮蔽
     highp float G = G_SchlicksmithGGX(dotNL, dotNV, rroughness);
-    // F = Fresnel factor (Reflectance depending on angle of incidence)
+    
+    // F项：Schlick菲涅尔近似 - 描述反射率随角度的变化
     highp vec3 F = F_Schlick(dotNV, F0);
 
+    // Cook-Torrance镜面反射BRDF：fs = D*G*F / (4*(n·l)*(n·v))
+    // 分母中的4来自于微表面理论的几何因子
+    // 添加小的epsilon(0.001)避免除零
     highp vec3 spec = D * F * G / (4.0 * dotNL * dotNV + 0.001);
-    highp vec3 kD   = (vec3(1.0) - F) * (1.0 - metallic);
+    
+    // ========================================================================
+    // 4. 能量守恒和材质类型处理
+    // ========================================================================
+    
+    // 计算漫反射权重kD：
+    // - (1-F)：菲涅尔效应，未被反射的能量用于漫反射
+    // - (1-metallic)：金属度，金属材质没有漫反射
+    highp vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
 
+    // ========================================================================
+    // 5. 最终BRDF组合
+    // ========================================================================
+    
+    // 完整BRDF = 漫反射项 + 镜面反射项
+    // - 漫反射：kD * basecolor / π（Lambertian模型）
+    // - 镜面反射：(1-kD) * spec（这里简化为spec，因为kD已经考虑了能量分配）
     color += (kD * basecolor / PI + (1.0 - kD) * spec);
+    
+    // 注意：这里没有乘以dotNL，因为在光照积分中会单独处理
+    // 如果需要包含Lambert余弦定律，可以取消下面的注释：
     // color += (kD * basecolor / PI + spec) * dotNL;
-    // color += (kD * basecolor / PI + spec) * dotNL * lightColor;
 
     return color;
 }
 
-highp vec2 ndcxy_to_uv(highp vec2 ndcxy) { return ndcxy * vec2(0.5, 0.5) + vec2(0.5, 0.5); }
+// ============================================================================
+// 坐标系转换工具函数
+// ============================================================================
 
-highp vec2 uv_to_ndcxy(highp vec2 uv) { return uv * vec2(2.0, 2.0) + vec2(-1.0, -1.0); }
+/**
+ * @brief 将NDC坐标转换为UV纹理坐标
+ * @details NDC (Normalized Device Coordinates) 标准化设备坐标系转换
+ *          
+ *          坐标系说明：
+ *          - NDC坐标系：范围[-1, 1]，原点在屏幕中心
+ *            * (-1, -1) = 左下角
+ *            * ( 1,  1) = 右上角
+ *            * ( 0,  0) = 屏幕中心
+ *          
+ *          - UV坐标系：范围[0, 1]，原点在左下角
+ *            * (0, 0) = 左下角
+ *            * (1, 1) = 右上角
+ *            * (0.5, 0.5) = 纹理中心
+ *          
+ *          转换公式：UV = (NDC + 1) / 2
+ *          
+ * @param ndcxy NDC坐标 (范围[-1, 1])
+ * @return UV纹理坐标 (范围[0, 1])
+ */
+highp vec2 ndcxy_to_uv(highp vec2 ndcxy) 
+{ 
+    // 线性变换：从[-1,1]映射到[0,1]
+    // ndcxy * 0.5 将范围从[-1,1]缩放到[-0.5,0.5]
+    // + 0.5 将范围从[-0.5,0.5]平移到[0,1]
+    return ndcxy * vec2(0.5, 0.5) + vec2(0.5, 0.5); 
+}
+
+/**
+ * @brief 将UV纹理坐标转换为NDC坐标
+ * @details UV坐标系到NDC坐标系的逆向转换
+ *          
+ *          转换公式：NDC = UV * 2 - 1
+ *          
+ *          应用场景：
+ *          - 屏幕空间效果计算
+ *          - 后处理着色器中的坐标转换
+ *          - 阴影贴图采样坐标计算
+ *          
+ * @param uv UV纹理坐标 (范围[0, 1])
+ * @return NDC坐标 (范围[-1, 1])
+ */
+highp vec2 uv_to_ndcxy(highp vec2 uv) 
+{ 
+    // 线性变换：从[0,1]映射到[-1,1]
+    // uv * 2.0 将范围从[0,1]缩放到[0,2]
+    // - 1.0 将范围从[0,2]平移到[-1,1]
+    return uv * vec2(2.0, 2.0) + vec2(-1.0, -1.0); 
+}

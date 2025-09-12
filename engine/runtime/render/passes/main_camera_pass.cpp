@@ -1,4 +1,5 @@
 #include "main_camera_pass.h"
+#include "directional_light_pass.h"
 #include "../../core/base/macro.h"
 #include "../../render/interface/rhi.h"
 #include "../../render/interface/vulkan/vulkan_rhi_resource.h"
@@ -15,12 +16,16 @@
 #include <cstring>
 #include <string>
 #include <chrono>
+#include <atomic>
+#include <thread>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vk_mem_alloc.h>
 
 #include "../../shader/generated/cpp/pic_vert.h"
 #include "../../shader/generated/cpp/pic_frag.h"
+#include "../../shader/generated/cpp/skybox_new_vert.h"
+#include "../../shader/generated/cpp/skybox_new_frag.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../../../3rdparty/tinyobjloader/examples/viewer/stb_image.h"
@@ -114,6 +119,38 @@ namespace Elish
         // Store render resource for later use
         m_render_resource = render_resource;
         
+        // 🔧 添加默认方向光源到RenderResource（如果还没有的话）
+        if (render_resource && render_resource->getDirectionalLightCount() == 0) {
+            // 创建默认方向光源
+            DirectionalLightData default_light;
+            default_light.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
+            default_light.intensity = 3.0f;
+            default_light.color = glm::vec3(1.0f, 1.0f, 1.0f);
+            default_light.enabled = true;
+            
+            render_resource->addDirectionalLight(default_light);
+            LOG_INFO("[MainCamera] Added default directional light to RenderResource");
+        }
+        
+        // 获取阴影通道资源并设置到渲染资源中
+        auto render_system = g_runtime_global_context.m_render_system;
+        if (render_system) {
+            auto render_pipeline = std::dynamic_pointer_cast<RenderPipeline>(render_system->getRenderPipeline());
+            if (render_pipeline) {
+                auto shadow_pass = render_pipeline->getDirectionalLightShadowPass();
+                if (shadow_pass) {
+                    // 获取阴影贴图资源
+                    auto shadow_image_view = shadow_pass->getShadowMapView();
+                    auto shadow_sampler = shadow_pass->getShadowMapSampler();
+                    
+                    if (shadow_image_view && shadow_sampler) {
+                        // 设置阴影贴图资源到渲染资源中
+                        render_resource->setDirectionalLightShadowResources(shadow_image_view, shadow_sampler);
+                    }
+                }
+            }
+        }
+        
         // Store loaded render objects to avoid repeated access
         if (m_render_resource) {
             m_loaded_render_objects = m_render_resource->getLoadedRenderObjects();
@@ -134,11 +171,11 @@ namespace Elish
                 LOG_ERROR("[MainCameraPass::preparePassData] Failed to create model pipeline resource");
             } else {
                 // Set up model pipeline in render pipelines array
-                if (m_render_pipelines.size() >= 2) {
+                if (m_render_pipelines.size() >= 3) {
                     const auto& modelPipelineResource = m_render_resource->getModelPipelineResource();
-                    m_render_pipelines[1].pipelineLayout = modelPipelineResource.pipelineLayout;
-                    m_render_pipelines[1].graphicsPipeline = modelPipelineResource.graphicsPipeline;
-                    m_render_pipelines[1].descriptorSetLayout = modelPipelineResource.descriptorSetLayout;
+                    m_render_pipelines[2].pipelineLayout = modelPipelineResource.pipelineLayout;
+                    m_render_pipelines[2].graphicsPipeline = modelPipelineResource.graphicsPipeline;
+                    m_render_pipelines[2].descriptorSetLayout = modelPipelineResource.descriptorSetLayout;
                 }
             }
         }
@@ -148,6 +185,8 @@ namespace Elish
             setupModelDescriptorSet();
             m_model_descriptor_sets_initialized = true;
         }
+        
+        // 天空盒描述符集将在首次渲染时延迟初始化
     }
     //补充前向渲染的命令
     /**
@@ -205,6 +244,9 @@ namespace Elish
         // 渲染背景
         drawBackground(command_buffer);
         
+        // 渲染天空盒
+        drawSkybox(command_buffer);
+        
         // 渲染模型
         drawModels(command_buffer);
         
@@ -229,6 +271,10 @@ namespace Elish
     }
 
     void MainCameraPass::drawBackground(RHICommandBuffer* command_buffer){
+        if (!m_enable_background) {
+            return; // 如果背景绘制未启用，直接返回
+        }
+        
         // 绑定图形管线
         if (!m_render_pipelines.empty() && m_render_pipelines[0].graphicsPipeline) {
             m_rhi->cmdBindPipelinePFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, m_render_pipelines[0].graphicsPipeline);
@@ -255,6 +301,86 @@ namespace Elish
         // 执行直接绘制命令（绘制6个顶点组成的两个三角形）
         m_rhi->cmdDraw(command_buffer, 6, 1, 0, 0);
     }
+
+    /**
+     * @brief 绘制天空盒。
+     * 该函数使用天空盒渲染管线和IBL立方体贴图资源绘制天空盒
+     */
+    void MainCameraPass::drawSkybox(RHICommandBuffer* command_buffer)
+    {
+        if (!m_enable_skybox) {
+            LOG_DEBUG("[Skybox] Skybox rendering disabled, skipping draw");
+            return; // 如果天空盒未启用，直接返回
+        }
+        
+        // LOG_DEBUG("[Skybox] Starting skybox rendering");
+
+        // 延迟初始化天空盒描述符集（只在首次渲染时初始化一次）
+        if (!m_skybox_descriptor_sets_initialized) {
+            LOG_DEBUG("[Skybox] Descriptor sets not initialized, setting up now");
+            setupSkyboxDescriptorSet();
+            // 如果初始化失败，setupSkyboxDescriptorSet会禁用天空盒
+            if (!m_skybox_descriptor_sets_initialized) {
+                return;
+            }
+        }
+
+        // 绑定天空盒图形管线
+        if (m_render_pipelines.size() > 1 && m_render_pipelines[1].graphicsPipeline) {
+            // LOG_DEBUG("[Skybox] Binding skybox graphics pipeline");
+            m_rhi->cmdBindPipelinePFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, m_render_pipelines[1].graphicsPipeline);
+        } else {
+            LOG_ERROR("[Skybox] No skybox graphics pipeline available (pipeline count: {})", m_render_pipelines.size());
+            return;
+        }
+
+        // 绑定天空盒渲染的描述符集
+        uint32_t currentFrame = m_rhi->getCurrentFrameIndex();
+        // LOG_DEBUG("[Skybox] Binding descriptor sets for frame {}", currentFrame);
+        
+        // 检查描述符集数组边界
+        if (currentFrame >= m_skybox_descriptor_sets.size()) {
+            LOG_ERROR("[Skybox] Current frame index {} exceeds descriptor sets size {}", currentFrame, m_skybox_descriptor_sets.size());
+            return;
+        }
+        
+        // 检查描述符集是否有效
+        if (!m_skybox_descriptor_sets[currentFrame]) {
+            LOG_ERROR("[Skybox] Descriptor set for frame {} is null", currentFrame);
+            return;
+        }
+        
+        m_rhi->cmdBindDescriptorSetsPFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS,
+                                       m_render_pipelines[1].pipelineLayout, 0, 1, &m_skybox_descriptor_sets[currentFrame], 0, nullptr);
+
+        // 准备推送常量数据（视图投影矩阵和相机位置）
+        struct SkyboxPushConstants {
+            glm::mat4 viewProjectionMatrix;
+            glm::vec3 cameraPosition;
+            float padding; // 对齐到16字节边界
+        } pushConstants;
+
+        // 获取当前相机的视图投影矩阵和位置
+        if (m_camera) {
+            pushConstants.viewProjectionMatrix = m_camera->getPersProjMatrix() * m_camera->getViewMatrix();
+            pushConstants.cameraPosition = m_camera->position();
+        } else {
+            // 如果相机未初始化，使用默认值
+            pushConstants.viewProjectionMatrix = glm::mat4(1.0f);
+            pushConstants.cameraPosition = glm::vec3(0.0f, 0.0f, 2.0f);
+        }
+
+        // 推送常量到着色器
+        // LOG_DEBUG("[Skybox] Pushing constants to vertex shader");
+        m_rhi->cmdPushConstantsPFN(command_buffer, m_render_pipelines[1].pipelineLayout, 
+                                  RHI_SHADER_STAGE_VERTEX_BIT, 0, sizeof(SkyboxPushConstants), &pushConstants);
+
+        // 执行天空盒绘制命令（绘制36个顶点组成的立方体）
+        // LOG_DEBUG("[Skybox] Executing draw command (36 vertices)");
+        m_rhi->cmdDraw(command_buffer, 36, 1, 0, 0);
+        // LOG_DEBUG("[Skybox] Skybox rendering completed successfully");
+    }
+
     // 设置渲染附件的方法
     void MainCameraPass::setupAttachments()
     {
@@ -423,6 +549,28 @@ namespace Elish
             m_descriptor_infos[frameIndex].layout = sharedLayout;
         }
 
+        // === 创建天空盒专用的描述符集布局 ===
+        RHIDescriptorSetLayoutBinding skybox_bindings[1];
+        
+        // 绑定点 0 的配置：立方体贴图采样器（天空盒不需要UBO）
+        RHIDescriptorSetLayoutBinding& skybox_samplerLayoutBinding = skybox_bindings[0];
+        skybox_samplerLayoutBinding.binding = 0;
+        skybox_samplerLayoutBinding.descriptorCount = 1;
+        skybox_samplerLayoutBinding.descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        skybox_samplerLayoutBinding.pImmutableSamplers = nullptr;
+        skybox_samplerLayoutBinding.stageFlags = RHI_SHADER_STAGE_VERTEX_BIT | RHI_SHADER_STAGE_FRAGMENT_BIT;
+
+        RHIDescriptorSetLayoutCreateInfo skybox_layoutInfo{};
+        skybox_layoutInfo.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        skybox_layoutInfo.bindingCount = sizeof(skybox_bindings) / sizeof(skybox_bindings[0]);
+        skybox_layoutInfo.pBindings = skybox_bindings;
+
+        // 创建天空盒描述符集布局
+        if (m_rhi->createDescriptorSetLayout(&skybox_layoutInfo, m_skybox_descriptor_layout) != RHI_SUCCESS)
+        {
+            throw std::runtime_error("create skybox descriptor set layout");
+        }
+
         
     }
     /**
@@ -436,7 +584,7 @@ namespace Elish
     void MainCameraPass::setupPipelines()
     {
         
-        m_render_pipelines.resize(2);  // Resize to accommodate both background and model pipelines  
+        m_render_pipelines.resize(3);  // Resize to accommodate background, skybox, and model pipelines  
 
                 
         
@@ -448,6 +596,9 @@ namespace Elish
         pipeline_layout_create_info.sType          = RHI_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipeline_layout_create_info.setLayoutCount = 1;
         pipeline_layout_create_info.pSetLayouts    = descriptorset_layouts;
+        // 背景渲染不使用推送常量，所以设置为0
+        pipeline_layout_create_info.pushConstantRangeCount = 0;
+        pipeline_layout_create_info.pPushConstantRanges = nullptr;
 
         if (m_rhi->createPipelineLayout(&pipeline_layout_create_info, m_render_pipelines[0].pipelineLayout) != RHI_SUCCESS)
         {
@@ -578,6 +729,91 @@ namespace Elish
         m_rhi->destroyShaderModule(vert_shader_module);
         m_rhi->destroyShaderModule(frag_shader_module);
 
+        // 创建天空盒渲染管线
+        RHIDescriptorSetLayout* skybox_descriptorset_layouts[1] = {m_skybox_descriptor_layout};
+
+        // 定义推送常量范围（用于传递视图投影矩阵和相机位置）
+        RHIPushConstantRange skybox_push_constant_range {};
+        skybox_push_constant_range.stageFlags = RHI_SHADER_STAGE_VERTEX_BIT;
+        skybox_push_constant_range.offset = 0;
+        skybox_push_constant_range.size = sizeof(glm::mat4) + sizeof(glm::vec3) + sizeof(float); // mat4 + vec3 + padding
+
+        RHIPipelineLayoutCreateInfo skybox_pipeline_layout_create_info {};
+        skybox_pipeline_layout_create_info.sType          = RHI_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        skybox_pipeline_layout_create_info.setLayoutCount = 1;
+        skybox_pipeline_layout_create_info.pSetLayouts    = skybox_descriptorset_layouts;
+        skybox_pipeline_layout_create_info.pushConstantRangeCount = 1;
+        skybox_pipeline_layout_create_info.pPushConstantRanges = &skybox_push_constant_range;
+
+        if (m_rhi->createPipelineLayout(&skybox_pipeline_layout_create_info, m_render_pipelines[1].pipelineLayout) != RHI_SUCCESS)
+        {
+            throw std::runtime_error("create skybox pipeline layout");
+        }
+
+        // 创建天空盒着色器模块
+        RHIShader* skybox_vert_shader_module = m_rhi->createShaderModule(SKYBOX_NEW_VERT);
+        RHIShader* skybox_frag_shader_module = m_rhi->createShaderModule(SKYBOX_NEW_FRAG);
+
+        RHIPipelineShaderStageCreateInfo skybox_vert_pipeline_shader_stage_create_info {};
+        skybox_vert_pipeline_shader_stage_create_info.sType  = RHI_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        skybox_vert_pipeline_shader_stage_create_info.stage  = RHI_SHADER_STAGE_VERTEX_BIT;
+        skybox_vert_pipeline_shader_stage_create_info.module = skybox_vert_shader_module;
+        skybox_vert_pipeline_shader_stage_create_info.pName  = "main";
+
+        RHIPipelineShaderStageCreateInfo skybox_frag_pipeline_shader_stage_create_info {};
+        skybox_frag_pipeline_shader_stage_create_info.sType  = RHI_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        skybox_frag_pipeline_shader_stage_create_info.stage  = RHI_SHADER_STAGE_FRAGMENT_BIT;
+        skybox_frag_pipeline_shader_stage_create_info.module = skybox_frag_shader_module;
+        skybox_frag_pipeline_shader_stage_create_info.pName  = "main";
+
+        RHIPipelineShaderStageCreateInfo skybox_shader_stages[] = {skybox_vert_pipeline_shader_stage_create_info,
+                                                                   skybox_frag_pipeline_shader_stage_create_info};
+
+        // 天空盒使用相同的顶点输入状态（无顶点缓冲）
+        RHIPipelineVertexInputStateCreateInfo skybox_vertex_input_state_create_info {};
+        skybox_vertex_input_state_create_info.sType = RHI_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        skybox_vertex_input_state_create_info.vertexBindingDescriptionCount   = 0;
+        skybox_vertex_input_state_create_info.pVertexBindingDescriptions      = nullptr;
+        skybox_vertex_input_state_create_info.vertexAttributeDescriptionCount = 0;
+        skybox_vertex_input_state_create_info.pVertexAttributeDescriptions    = nullptr;
+
+        // 天空盒深度测试设置：深度测试开启，深度写入关闭，比较操作为小于等于
+        RHIPipelineDepthStencilStateCreateInfo skybox_depth_stencil_create_info {};
+        skybox_depth_stencil_create_info.sType            = RHI_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        skybox_depth_stencil_create_info.depthTestEnable  = RHI_TRUE;  // 开启深度测试
+        skybox_depth_stencil_create_info.depthWriteEnable = RHI_FALSE; // 关闭深度写入
+        skybox_depth_stencil_create_info.depthCompareOp   = RHI_COMPARE_OP_LESS_OR_EQUAL; // 小于等于通过测试
+        skybox_depth_stencil_create_info.depthBoundsTestEnable = RHI_FALSE;
+        skybox_depth_stencil_create_info.stencilTestEnable     = RHI_FALSE;
+
+        RHIGraphicsPipelineCreateInfo skybox_pipelineInfo {};
+        skybox_pipelineInfo.sType               = RHI_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        skybox_pipelineInfo.stageCount          = 2;
+        skybox_pipelineInfo.pStages             = skybox_shader_stages;
+        skybox_pipelineInfo.pVertexInputState   = &skybox_vertex_input_state_create_info;
+        skybox_pipelineInfo.pInputAssemblyState = &input_assembly_create_info;
+        skybox_pipelineInfo.pViewportState      = &viewport_state_create_info;
+        skybox_pipelineInfo.pRasterizationState = &rasterization_state_create_info;
+        skybox_pipelineInfo.pMultisampleState   = &multisample_state_create_info;
+        skybox_pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
+        skybox_pipelineInfo.pDepthStencilState  = &skybox_depth_stencil_create_info;
+        skybox_pipelineInfo.layout              = m_render_pipelines[1].pipelineLayout;
+        skybox_pipelineInfo.renderPass          = m_framebuffer.render_pass;
+        skybox_pipelineInfo.subpass             = 0;
+        skybox_pipelineInfo.basePipelineHandle  = RHI_NULL_HANDLE;
+        skybox_pipelineInfo.pDynamicState       = &dynamic_state_create_info;
+
+        if (m_rhi->createGraphicsPipelines(RHI_NULL_HANDLE,
+            1,
+            &skybox_pipelineInfo,
+            m_render_pipelines[1].graphicsPipeline) !=
+            RHI_SUCCESS)
+        {
+            throw std::runtime_error("create skybox graphics pipeline");
+        }
+        m_rhi->destroyShaderModule(skybox_vert_shader_module);
+        m_rhi->destroyShaderModule(skybox_frag_shader_module);
+
     }
     /**
      * @brief 设置描述符集。
@@ -645,6 +881,111 @@ namespace Elish
         
     }
 
+    /**
+     * @brief 设置天空盒描述符集，复用IBL立方体贴图资源。
+     * 该函数为天空盒渲染创建描述符集，使用IBL资源中的立方体贴图
+     */
+    void MainCameraPass::setupSkyboxDescriptorSet()
+    {
+        // 使用原子操作确保只初始化一次，避免多线程竞争
+        static std::atomic<bool> setup_in_progress{false};
+        
+        if (m_skybox_descriptor_sets_initialized) {
+            LOG_DEBUG("[Skybox] Descriptor sets already initialized, skipping setup");
+            return; // 避免重复初始化
+        }
+        
+        // 检查是否正在初始化中
+        if (setup_in_progress.exchange(true)) {
+            LOG_DEBUG("[Skybox] Setup already in progress, waiting...");
+            // 等待其他线程完成初始化
+            while (!m_skybox_descriptor_sets_initialized && setup_in_progress.load()) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            return;
+        }
+        
+        LOG_INFO("[Skybox] Starting skybox descriptor set setup");
+
+        // 检查RenderResource是否可用
+        if (!m_render_resource) {
+            LOG_ERROR("[Skybox] RenderResource is null, disabling skybox rendering");
+            setSkyboxEnabled(false);
+            setup_in_progress.store(false);
+            return;
+        }
+
+        // 检查立方体贴图资源是否可用
+        auto cubemapImageView = m_render_resource->getCubemapImageView();
+        auto cubemapSampler = m_render_resource->getCubemapImageSampler();
+        
+        if (!cubemapImageView || !cubemapSampler) {
+            LOG_ERROR("[Skybox] Cubemap resources not available (ImageView: {}, Sampler: {}), disabling skybox rendering", 
+                     (void*)cubemapImageView, (void*)cubemapSampler);
+            setSkyboxEnabled(false);
+            setup_in_progress.store(false);
+            return;
+        }
+        
+        LOG_DEBUG("[Skybox] Cubemap resources validated successfully");
+
+        uint32_t maxFramesInFlight = m_rhi->getMaxFramesInFlight();
+        LOG_DEBUG("[Skybox] Setting up descriptor sets for {} frames in flight", maxFramesInFlight);
+        
+        // 调整vector大小以容纳所有帧的描述符集
+        m_skybox_descriptor_sets.resize(maxFramesInFlight);
+        
+        // 为每个飞行中的帧创建独立的天空盒描述符集
+        for (uint32_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++) {
+            LOG_DEBUG("[Skybox] Setting up descriptor set for frame {}", frameIndex);
+            // 分配天空盒描述符集
+            RHIDescriptorSetAllocateInfo skybox_descriptor_set_alloc_info;
+            skybox_descriptor_set_alloc_info.sType              = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+            skybox_descriptor_set_alloc_info.pNext              = NULL;
+            skybox_descriptor_set_alloc_info.descriptorPool     = m_rhi->getDescriptorPoor();
+            skybox_descriptor_set_alloc_info.descriptorSetCount = 1;
+            skybox_descriptor_set_alloc_info.pSetLayouts        = &m_skybox_descriptor_layout;
+
+            if (RHI_SUCCESS != m_rhi->allocateDescriptorSets(&skybox_descriptor_set_alloc_info, m_skybox_descriptor_sets[frameIndex]))
+            {
+                LOG_ERROR("[Skybox] Failed to allocate skybox descriptor set for frame {}, disabling skybox rendering", frameIndex);
+                setSkyboxEnabled(false);
+                setup_in_progress.store(false);
+                return;
+            }
+            
+            LOG_DEBUG("[Skybox] Successfully allocated descriptor set for frame {}", frameIndex);
+
+            // 设置IBL立方体贴图信息（天空盒只需要立方体贴图，不需要UBO）
+            RHIDescriptorImageInfo skyboxImageInfo{};
+            skyboxImageInfo.imageLayout = RHI_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            skyboxImageInfo.imageView = cubemapImageView;
+            skyboxImageInfo.sampler = cubemapSampler;
+
+            // 写入描述符集（只写入立方体贴图到绑定点0）
+            RHIWriteDescriptorSet skybox_descriptor_write_info{};
+            skybox_descriptor_write_info.sType = RHI_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            skybox_descriptor_write_info.pNext = nullptr;
+            skybox_descriptor_write_info.dstSet = m_skybox_descriptor_sets[frameIndex];
+            skybox_descriptor_write_info.dstBinding = 0;  // 立方体贴图绑定到绑定点0
+            skybox_descriptor_write_info.dstArrayElement = 0;
+            skybox_descriptor_write_info.descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            skybox_descriptor_write_info.descriptorCount = 1;
+            skybox_descriptor_write_info.pBufferInfo = nullptr;
+            skybox_descriptor_write_info.pImageInfo = &skyboxImageInfo;
+            skybox_descriptor_write_info.pTexelBufferView = nullptr;
+            
+            m_rhi->updateDescriptorSets(1, &skybox_descriptor_write_info, 0, nullptr);
+            LOG_DEBUG("[Skybox] Updated descriptor set for frame {} with cubemap only", frameIndex);
+        }
+        
+        m_skybox_descriptor_sets_initialized = true;
+        LOG_INFO("[Skybox] Skybox descriptor sets setup completed successfully");
+        
+        // 重置初始化进行中的标志
+        setup_in_progress.store(false);
+    }
+
     void MainCameraPass::setupModelDescriptorSet()//分配模型描述符集
     {
         
@@ -686,7 +1027,7 @@ namespace Elish
                     object_descriptor_set_alloc_info.pNext = nullptr;
                     object_descriptor_set_alloc_info.descriptorPool = m_rhi->getDescriptorPoor();
                     object_descriptor_set_alloc_info.descriptorSetCount = 1;
-                    object_descriptor_set_alloc_info.pSetLayouts = &m_render_pipelines[1].descriptorSetLayout;
+                    object_descriptor_set_alloc_info.pSetLayouts = &m_render_pipelines[2].descriptorSetLayout;
 
                     // 确保渲染对象有描述符集数组
                     if (renderObject.descriptorSets.size() != maxFramesInFlight) {
@@ -759,11 +1100,57 @@ namespace Elish
                     object_descriptor_writes_info[2].descriptorCount = 1;
                     object_descriptor_writes_info[2].pImageInfo = &CubeMapImageInfo;
 
+                    // Binding 8: 方向光阴影贴图
+                    RHIDescriptorImageInfo shadowMapImageInfo{};
+                    shadowMapImageInfo.imageLayout = RHI_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    
+                    // 获取阴影贴图资源
+                    auto shadowMapImageView = m_render_resource->getDirectionalLightShadowImageView();
+                    auto shadowMapSampler = m_render_resource->getDirectionalLightShadowImageSampler();
+                    
+                    if (!shadowMapImageView) {
+                        LOG_ERROR("[setupModelDescriptorSet] Shadow map image view is null for object {} frame {}", objIndex, frameIndex);
+                        continue;
+                    }
+                    
+                    if (!shadowMapSampler) {
+                        LOG_ERROR("[setupModelDescriptorSet] Shadow map sampler is null for object {} frame {}", objIndex, frameIndex);
+                        continue;
+                    }
+                    
+                    shadowMapImageInfo.imageView = shadowMapImageView;
+                    shadowMapImageInfo.sampler = shadowMapSampler;
+                    
+                    object_descriptor_writes_info[8].sType = RHI_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    object_descriptor_writes_info[8].dstSet = renderObject.descriptorSets[frameIndex];
+                    object_descriptor_writes_info[8].dstBinding = 8;
+                    object_descriptor_writes_info[8].dstArrayElement = 0;
+                    object_descriptor_writes_info[8].descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+                    object_descriptor_writes_info[8].descriptorCount = 1;
+                    object_descriptor_writes_info[8].pImageInfo = &shadowMapImageInfo;
+                    
+                    // Binding 9: 光源投影视图矩阵uniform buffer
+                    RHIDescriptorBufferInfo lightSpaceMatrixBufferInfo = {};
+                    lightSpaceMatrixBufferInfo.offset = 0;
+                    lightSpaceMatrixBufferInfo.range = sizeof(glm::mat4);
+                    lightSpaceMatrixBufferInfo.buffer = lightSpaceMatrixBuffers[frameIndex];
+                    
+                    object_descriptor_writes_info[9].sType = RHI_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+                    object_descriptor_writes_info[9].pNext = nullptr;
+                    object_descriptor_writes_info[9].dstSet = renderObject.descriptorSets[frameIndex];
+                    object_descriptor_writes_info[9].dstBinding = 9;
+                    object_descriptor_writes_info[9].dstArrayElement = 0;
+                    object_descriptor_writes_info[9].descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+                    object_descriptor_writes_info[9].descriptorCount = 1;
+                    object_descriptor_writes_info[9].pBufferInfo = &lightSpaceMatrixBufferInfo;
+                    object_descriptor_writes_info[9].pImageInfo = nullptr;
+                    object_descriptor_writes_info[9].pTexelBufferView = nullptr;
+
                     if (!renderObject.textureImageViews.empty() && !renderObject.textureSamplers.empty()) {
                         hasModelTextures = true;
                         
-                        // Configure texture bindings (3 to layout_size-1)
-                        for (uint32_t i = 3; i < layout_size; ++i) {
+                        // Configure texture bindings (3 to 7, 跳过binding 8和9)
+                        for (uint32_t i = 3; i < 8; ++i) {
                             uint32_t textureIndex = (i-3) % renderObject.textureImageViews.size();
                             
                             // Add null pointer checks for texture resources
@@ -840,7 +1227,7 @@ namespace Elish
         // LOG_INFO("[MainCameraPass::drawModels] Starting to render {} models", m_loaded_render_objects.size());
         
         // Check if model pipeline is available
-        if (m_render_pipelines.size() < 2 || !m_render_pipelines[1].graphicsPipeline) {
+        if (m_render_pipelines.size() < 3 || !m_render_pipelines[2].graphicsPipeline) {
             LOG_ERROR("[MainCameraPass::drawModels] Model rendering pipeline not available");
             return;
         }
@@ -848,7 +1235,7 @@ namespace Elish
         
         
         // Bind model rendering pipeline
-        m_rhi->cmdBindPipelinePFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, m_render_pipelines[1].graphicsPipeline);
+        m_rhi->cmdBindPipelinePFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, m_render_pipelines[2].graphicsPipeline);
 
         
         // 获取当前时间用于动画计算
@@ -880,7 +1267,7 @@ namespace Elish
             
             // 通过Push Constants传递model矩阵到着色器
             // LOG_DEBUG("[MainCameraPass::drawModels] About to call cmdPushConstantsPFN for model {}", i);
-            m_rhi->cmdPushConstantsPFN(command_buffer, m_render_pipelines[1].pipelineLayout, 
+            m_rhi->cmdPushConstantsPFN(command_buffer, m_render_pipelines[2].pipelineLayout, 
                                      RHI_SHADER_STAGE_VERTEX_BIT, 0, sizeof(glm::mat4), &modelMatrix);
             // LOG_DEBUG("[MainCameraPass::drawModels] cmdPushConstantsPFN completed for model {}", i);
             
@@ -909,7 +1296,7 @@ namespace Elish
             // 绑定模型渲染的描述符集
             // LOG_DEBUG("[MainCameraPass::drawModels] About to bind descriptor sets for model {}", i);
             m_rhi->cmdBindDescriptorSetsPFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, 
-                                          m_render_pipelines[1].pipelineLayout, 0, 1, 
+                                          m_render_pipelines[2].pipelineLayout, 0, 1, 
                                           &renderObject.descriptorSets[m_rhi->getCurrentFrameIndex()], 0, nullptr);
             // LOG_DEBUG("[MainCameraPass::drawModels] Descriptor sets bound for model {}", i);
             
@@ -1200,6 +1587,18 @@ namespace Elish
                                viewUniformBuffers[i],
                                viewUniformBuffersMemory[i]);
         }
+        
+        // 创建光源投影视图矩阵uniform buffer
+        RHIDeviceSize lightSpaceMatrixBufferSize = sizeof(glm::mat4);
+        lightSpaceMatrixBuffers.resize(maxFramesInFlight);
+        lightSpaceMatrixBuffersMemory.resize(maxFramesInFlight);
+        for (size_t i = 0; i < maxFramesInFlight; i++) {
+            m_rhi->createBuffer(lightSpaceMatrixBufferSize,
+                               RHI_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                               RHI_MEMORY_PROPERTY_HOST_VISIBLE_BIT | RHI_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                               lightSpaceMatrixBuffers[i],
+                               lightSpaceMatrixBuffersMemory[i]);
+        }
     };		// 创建UnifromBuffer统一缓存区，为每个飞行中的帧分配独立缓冲区
     
     void MainCameraPass::updateUniformBuffer(uint32_t currentFrameIndex) {
@@ -1240,9 +1639,38 @@ namespace Elish
 
         UniformBufferObjectView ubv{};
         Light light;
-        light.position = glm::vec4(2.0, 0.0, 2.0, 0.0);
-        light.color = glm::vec4(1.0, 1.0, 1.0, 3.0);
-        light.direction = glm::vec4(-2.0, 0.0, -2.0, 0.0);
+        
+        // 🔧 直接从RenderResource获取方向光源数据
+        glm::vec3 light_position;
+        glm::vec3 light_direction;
+        glm::vec3 light_color;
+        float light_intensity;
+        
+        // 从RenderResource获取主要方向光源
+        auto primary_light = m_render_resource->getPrimaryDirectionalLight();
+        if (primary_light)
+        {
+            auto gpu_data = primary_light->toGPUData();
+            light_position = glm::vec3(gpu_data.position);
+            light_direction = glm::vec3(gpu_data.direction);
+            light_color = glm::vec3(gpu_data.color);
+            light_intensity = gpu_data.color.w; // 强度存储在颜色的w分量中
+            LOG_DEBUG("[MainCamera] Using light from RenderResource: Position ({:.2f}, {:.2f}, {:.2f}), Intensity {:.2f}", 
+                     light_position.x, light_position.y, light_position.z, light_intensity);
+        }
+        else
+        {
+            // 回退到默认光源
+            light_position = glm::vec3(2.0f, 4.0f, -1.0f);
+            light_direction = glm::vec3(-0.2f, -1.0f, -0.3f);
+            light_color = glm::vec3(1.0f, 1.0f, 1.0f);
+            light_intensity = 3.0f;
+            LOG_WARN("[MainCamera] No directional light found in RenderResource, using default light");
+        }
+        
+        light.position = glm::vec4(light_position, 0.0); // w=0表示方向光
+        light.color = glm::vec4(light_color, light_intensity);
+        light.direction = glm::vec4(light_direction, 0.0);
         light.info = glm::vec4(0.0, 0.0, 0.0, 0.0);
         ubv.directional_lights[0] = light;
         ubv.lights_count = glm::ivec4(1, 0, 0, 1);//todo
@@ -1260,6 +1688,19 @@ namespace Elish
          m_rhi->mapMemory(viewUniformBuffersMemory[currentFrameIndex], 0, sizeof(ubv), 0, &data_view);
         memcpy(data_view, &ubv, sizeof(ubv));
         m_rhi->unmapMemory(viewUniformBuffersMemory[currentFrameIndex]);
+        
+        // 更新光源投影视图矩阵uniform buffer
+        if (m_directional_light_shadow_pass) {
+            // 🔧 阴影通道现在直接从 RenderResource 获取光源数据
+            // 重新计算光源矩阵以反映新的光源位置
+            m_directional_light_shadow_pass->updateLightMatrix(m_render_resource);
+            
+            glm::mat4 lightSpaceMatrix = m_directional_light_shadow_pass->getLightProjectionViewMatrix();
+            void* lightSpaceData;
+            m_rhi->mapMemory(lightSpaceMatrixBuffersMemory[currentFrameIndex], 0, sizeof(lightSpaceMatrix), 0, &lightSpaceData);
+            memcpy(lightSpaceData, &lightSpaceMatrix, sizeof(lightSpaceMatrix));
+            m_rhi->unmapMemory(lightSpaceMatrixBuffersMemory[currentFrameIndex]);
+        }
        
     }
      void MainCameraPass::updateAfterFramebufferRecreate()
@@ -1350,5 +1791,50 @@ namespace Elish
         }
         
 
+    }
+    
+    // 旧的光源系统方法已移除，现在使用 RenderResource 管理光源
+    
+    // 旧的兼容性光源接口已移除
+
+    /**
+     * @brief 设置背景绘制启用状态
+     * @param enabled 是否启用背景绘制
+     */
+    void MainCameraPass::setBackgroundEnabled(bool enabled)
+    {
+        m_enable_background = enabled;
+    }
+
+    /**
+     * @brief 获取背景绘制启用状态
+     * @return 背景绘制是否启用
+     */
+    bool MainCameraPass::isBackgroundEnabled() const
+    {
+        return m_enable_background;
+    }
+
+    /**
+     * @brief 设置天空盒绘制启用状态
+     * @param enabled 是否启用天空盒绘制
+     */
+    void MainCameraPass::setSkyboxEnabled(bool enabled)
+    {
+        if (m_enable_skybox != enabled) {
+            LOG_INFO("[Skybox] Skybox rendering state changed: {} -> {}", 
+                     m_enable_skybox ? "enabled" : "disabled", 
+                     enabled ? "enabled" : "disabled");
+        }
+        m_enable_skybox = enabled;
+    }
+
+    /**
+     * @brief 获取天空盒绘制启用状态
+     * @return 天空盒绘制是否启用
+     */
+    bool MainCameraPass::isSkyboxEnabled() const
+    {
+        return m_enable_skybox;
     }
 }

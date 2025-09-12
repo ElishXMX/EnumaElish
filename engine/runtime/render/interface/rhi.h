@@ -30,6 +30,7 @@ namespace Elish
         // allocate and create
         virtual bool allocateCommandBuffers(const RHICommandBufferAllocateInfo* pAllocateInfo, RHICommandBuffer* &pCommandBuffers) = 0;
         virtual bool allocateDescriptorSets(const RHIDescriptorSetAllocateInfo* pAllocateInfo, RHIDescriptorSet* &pDescriptorSets) = 0;
+        virtual RHIResult allocateDescriptorSets(RHIDescriptorSetLayout* layout, RHIDescriptorSet*& descriptor_set) = 0;
         virtual void createSwapchain() = 0;
         virtual void recreateSwapchain() = 0;
         virtual void createSwapchainImageViews() = 0;
@@ -38,6 +39,7 @@ namespace Elish
         virtual RHISampler* getOrCreateMipmapSampler(uint32_t width, uint32_t height) = 0;
         virtual RHIShader* createShaderModule(const std::vector<unsigned char>& shader_code) = 0;
         virtual void createBuffer(RHIDeviceSize size, RHIBufferUsageFlags usage, RHIMemoryPropertyFlags properties, RHIBuffer* &buffer, RHIDeviceMemory* &buffer_memory) = 0;
+        virtual RHIResult createBuffer(const RHIBufferCreateInfo* create_info, RHIBuffer*& buffer) = 0;
         virtual void createBufferAndInitialize(RHIBufferUsageFlags usage, RHIMemoryPropertyFlags properties, RHIBuffer*& buffer, RHIDeviceMemory*& buffer_memory, RHIDeviceSize size, void* data = nullptr, int datasize = 0) = 0;
         virtual bool createBufferVMA(VmaAllocator allocator,
             const RHIBufferCreateInfo* pBufferCreateInfo,
@@ -56,8 +58,8 @@ namespace Elish
         virtual void copyBuffer(RHIBuffer* srcBuffer, RHIBuffer* dstBuffer, RHIDeviceSize srcOffset, RHIDeviceSize dstOffset, RHIDeviceSize size) = 0;
         virtual void createImage(uint32_t image_width, uint32_t image_height, RHIFormat format, RHIImageTiling image_tiling, RHIImageUsageFlags image_usage_flags, RHIMemoryPropertyFlags memory_property_flags,
             RHIImage* &image, RHIDeviceMemory* &memory, RHIImageCreateFlags image_create_flags, uint32_t array_layers, uint32_t miplevels) = 0;
-        virtual void createImageView(RHIImage* image, RHIFormat format, RHIImageAspectFlags image_aspect_flags, RHIImageViewType view_type, uint32_t layout_count, uint32_t miplevels,
-            RHIImageView* &image_view) = 0;
+        virtual void createImageView(RHIImage* image, RHIFormat format, RHIImageAspectFlags image_aspect_flags, RHIImageViewType view_type, uint32_t layout_count, uint32_t miplevels, RHIImageView*& image_view) = 0;
+        virtual RHIResult createImageView(const RHIImageViewCreateInfo* create_info, RHIImageView*& image_view) = 0;
         virtual void createGlobalImage(RHIImage* &image, RHIImageView* &image_view, VmaAllocation& image_allocation, uint32_t texture_image_width, uint32_t texture_image_height, void* texture_image_pixels, RHIFormat texture_image_format, uint32_t miplevels = 0) = 0;
         virtual void createCubeMap(RHIImage* &image, RHIImageView* &image_view, VmaAllocation& image_allocation, uint32_t texture_image_width, uint32_t texture_image_height, std::array<void*, 6> texture_image_pixels, RHIFormat texture_image_format, uint32_t miplevels) = 0;
         virtual void createCommandPool() = 0;
@@ -68,6 +70,16 @@ namespace Elish
         virtual bool createFramebuffer(const RHIFramebufferCreateInfo* pCreateInfo, RHIFramebuffer* &pFramebuffer) = 0;
         virtual bool createGraphicsPipelines(RHIPipelineCache* pipelineCache, uint32_t createInfoCount, const RHIGraphicsPipelineCreateInfo* pCreateInfos, RHIPipeline* &pPipelines) = 0;
         virtual bool createComputePipelines(RHIPipelineCache* pipelineCache, uint32_t createInfoCount, const RHIComputePipelineCreateInfo* pCreateInfos, RHIPipeline* &pPipelines) = 0;
+        virtual bool createRayTracingPipelines(RHIPipelineCache* pipelineCache, uint32_t createInfoCount, const RHIRayTracingPipelineCreateInfo* pCreateInfos, RHIPipeline* &pPipelines) = 0;
+        
+        // 光线追踪加速结构相关接口
+        virtual bool createAccelerationStructure(const RHIAccelerationStructureCreateInfo* pCreateInfo, RHIAccelerationStructure* &pAccelerationStructure) = 0;
+        virtual bool buildAccelerationStructure(RHICommandBuffer* commandBuffer, const RHIAccelerationStructureBuildInfo* pBuildInfo) = 0;
+        virtual void getAccelerationStructureDeviceAddress(const RHIAccelerationStructureDeviceAddressInfo* pInfo, RHIDeviceAddress* pAddress) = 0;
+        
+        // 光线追踪着色器绑定表相关接口
+        virtual bool createShaderBindingTable(const RHIShaderBindingTableCreateInfo* pCreateInfo, RHIPipeline* pipeline, RHIBuffer* &pBuffer, VmaAllocation* pAllocation) = 0;
+        virtual void cmdTraceRays(RHICommandBuffer* commandBuffer, const RHITraceRaysInfo* pTraceRaysInfo) = 0;
         virtual bool createPipelineLayout(const RHIPipelineLayoutCreateInfo* pCreateInfo, RHIPipelineLayout* &pPipelineLayout) = 0;
         virtual bool createRenderPass(const RHIRenderPassCreateInfo* pCreateInfo, RHIRenderPass* &pRenderPass) = 0;
         virtual bool createSampler(const RHISamplerCreateInfo* pCreateInfo, RHISampler* &pSampler) = 0;
@@ -168,6 +180,23 @@ namespace Elish
         virtual void unmapMemory(RHIDeviceMemory* memory) = 0;
         virtual void invalidateMappedMemoryRanges(void* pNext, RHIDeviceMemory* memory, RHIDeviceSize offset, RHIDeviceSize size) = 0;
         virtual void flushMappedMemoryRanges(void* pNext, RHIDeviceMemory* memory, RHIDeviceSize offset, RHIDeviceSize size) = 0;
+        
+        // 内存管理相关方法
+        virtual void getBufferMemoryRequirements(RHIBuffer* buffer, RHIMemoryRequirements* pMemoryRequirements) = 0;
+        virtual RHIResult allocateMemory(const RHIMemoryAllocateInfo* pAllocateInfo, RHIDeviceMemory*& pMemory) = 0;
+        virtual RHIResult bindBufferMemory(RHIBuffer* buffer, RHIDeviceMemory* memory, RHIDeviceSize memory_offset) = 0;
+        virtual void getImageMemoryRequirements(RHIImage* image, RHIMemoryRequirements* memory_requirements) = 0;
+        virtual RHIResult bindImageMemory(RHIImage* image, RHIDeviceMemory* memory, RHIDeviceSize memory_offset) = 0;
+        virtual RHIResult createImage(const RHIImageCreateInfo* create_info, RHIImage*& image) = 0;
+        
+        // Ray tracing related methods
+        virtual uint32_t getRayTracingShaderGroupHandleSize() = 0;
+        virtual uint32_t getRayTracingShaderGroupBaseAlignment() = 0;
+        virtual RHIResult getRayTracingShaderGroupHandlesKHR(RHIPipeline* pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData) = 0;
+        virtual uint32_t findMemoryType(uint32_t type_filter, RHIMemoryPropertyFlags properties) = 0;
+        virtual RHIResult createRayTracingPipelinesKHR(uint32_t create_info_count, const RHIRayTracingPipelineCreateInfo* create_infos, RHIPipeline*& pipelines) = 0;
+        virtual RHIDeviceAddress getBufferDeviceAddress(RHIBuffer* buffer) = 0;
+        virtual bool isRayTracingSupported() = 0;
 
         //semaphores
         virtual RHISemaphore* &getTextureCopySemaphore(uint32_t index) = 0;

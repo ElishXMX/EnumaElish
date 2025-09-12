@@ -22,7 +22,7 @@ namespace Elish
         while (!window_system->shouldClose())
         {
             const float delta_time = calculateDeltaTime();//计算下一帧
-            
+            // Sleep(10000 / 60); //使用Windows API的Sleep函数来控制帧率
             tickOneFrame(delta_time);//窗口启动后继续
      }
     }

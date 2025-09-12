@@ -38,10 +38,14 @@ namespace Elish
 #define RHI_SUBPASS_EXTERNAL               (~0U)
 #define RHI_QUEUE_FAMILY_IGNORED           (~0U)
 #define RHI_WHOLE_SIZE                     (~0ULL)
+#define RHI_SHADER_UNUSED_KHR              (~0U)
 #define RHI_NULL_HANDLE                       nullptr
 #define RHI_SUCCESS                        true
 #define RHI_TRUE                           true
 #define RHI_FALSE                           false
+
+    // RHI Result type definition
+    typedef bool RHIResult;
 
     enum RHIStructureType : int
     {
@@ -365,6 +369,7 @@ namespace Elish
         RHI_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR = 1000150015,
         RHI_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR = 1000150016,
         RHI_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_INTERFACE_CREATE_INFO_KHR = 1000150018,
+        RHI_STRUCTURE_TYPE_TRACE_RAYS_INFO_KHR = 1000348000,
         RHI_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR = 1000348013,
         RHI_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV = 1000152000,
         RHI_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV = 1000154000,
@@ -1320,6 +1325,74 @@ namespace Elish
         RHI_SHADER_STAGE_CALLABLE_BIT_NV = RHI_SHADER_STAGE_CALLABLE_BIT_KHR,
         RHI_SHADER_STAGE_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
     };
+
+    /**
+     * @brief 光线追踪着色器组类型枚举
+     * @details 定义光线追踪管线中不同类型的着色器组
+     */
+    enum RHIRayTracingShaderGroupTypeKHR : int {
+        RHI_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR = 0,              // 通用着色器组（raygen、miss、callable）
+        RHI_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR = 1,  // 三角形命中组（closest hit + any hit）
+        RHI_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR = 2, // 程序化命中组（intersection + closest hit + any hit）
+        RHI_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_NV = RHI_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+        RHI_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_NV = RHI_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+        RHI_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_NV = RHI_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR,
+        RHI_RAY_TRACING_SHADER_GROUP_TYPE_MAX_ENUM_KHR = 0x7FFFFFFF
+    };
+
+    // 光线追踪加速结构类型
+    enum RHIAccelerationStructureTypeKHR : int {
+        RHI_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR = 0,    // 顶层加速结构（TLAS）
+        RHI_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR = 1, // 底层加速结构（BLAS）
+        RHI_ACCELERATION_STRUCTURE_TYPE_GENERIC_KHR = 2,      // 通用加速结构
+        RHI_ACCELERATION_STRUCTURE_TYPE_MAX_ENUM_KHR = 0x7FFFFFFF
+    };
+
+    // 光线追踪加速结构构建标志位
+    enum RHIBuildAccelerationStructureFlagBitsKHR : int {
+        RHI_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR = 0x00000001,      // 允许更新
+        RHI_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR = 0x00000002,  // 允许压缩
+        RHI_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR = 0x00000004, // 优化追踪速度
+        RHI_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR = 0x00000008, // 优化构建速度
+        RHI_BUILD_ACCELERATION_STRUCTURE_LOW_MEMORY_BIT_KHR = 0x00000010,        // 低内存使用
+        RHI_BUILD_ACCELERATION_STRUCTURE_FLAG_BITS_MAX_ENUM_KHR = 0x7FFFFFFF
+    };
+
+    // 光线追踪几何类型
+    enum RHIGeometryTypeKHR : int {
+        RHI_GEOMETRY_TYPE_TRIANGLES_KHR = 0, // 三角形几何
+        RHI_GEOMETRY_TYPE_AABBS_KHR = 1,     // 轴对齐包围盒几何
+        RHI_GEOMETRY_TYPE_INSTANCES_KHR = 2, // 实例几何
+        RHI_GEOMETRY_TYPE_MAX_ENUM_KHR = 0x7FFFFFFF
+    };
+
+    // 光线追踪几何标志位
+    enum RHIGeometryFlagBitsKHR : int {
+        RHI_GEOMETRY_OPAQUE_BIT_KHR = 0x00000001,                        // 不透明几何
+        RHI_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR = 0x00000002, // 不重复any hit调用
+        RHI_GEOMETRY_FLAG_BITS_MAX_ENUM_KHR = 0x7FFFFFFF
+    };
+
+    // 光线追踪实例标志位
+    enum RHIGeometryInstanceFlagBitsKHR : int {
+        RHI_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR = 0x00000001,    // 禁用三角形面剔除
+        RHI_GEOMETRY_INSTANCE_TRIANGLE_FLIP_FACING_BIT_KHR = 0x00000002,            // 翻转三角形朝向
+        RHI_GEOMETRY_INSTANCE_FORCE_OPAQUE_BIT_KHR = 0x00000004,                    // 强制不透明
+        RHI_GEOMETRY_INSTANCE_FORCE_NO_OPAQUE_BIT_KHR = 0x00000008,                 // 强制透明
+        RHI_GEOMETRY_INSTANCE_FLAG_BITS_MAX_ENUM_KHR = 0x7FFFFFFF
+    };
+
+    // 光线追踪构建模式枚举
+    enum RHIBuildAccelerationStructureModeKHR : int {
+        RHI_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR = 0,   // 构建模式
+        RHI_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR = 1,  // 更新模式
+        RHI_BUILD_ACCELERATION_STRUCTURE_MODE_MAX_ENUM_KHR = 0x7FFFFFFF
+    };
+
+    // 光线追踪相关类型定义
+    typedef uint32_t RHIBuildAccelerationStructureFlagsKHR;
+    typedef uint32_t RHIGeometryFlagsKHR;
+    typedef uint32_t RHIGeometryInstanceFlagsKHR;
 
     enum RHIComponentSwizzle : int {
         RHI_COMPONENT_SWIZZLE_IDENTITY = 0,

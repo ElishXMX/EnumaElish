@@ -61,6 +61,38 @@ namespace Elish
         bool createFramebuffer(const RHIFramebufferCreateInfo* pCreateInfo, RHIFramebuffer* &pFramebuffer) override;
         bool createGraphicsPipelines(RHIPipelineCache* pipelineCache, uint32_t createInfoCount, const RHIGraphicsPipelineCreateInfo* pCreateInfos, RHIPipeline* &pPipelines) override;
         bool createComputePipelines(RHIPipelineCache* pipelineCache, uint32_t createInfoCount, const RHIComputePipelineCreateInfo* pCreateInfos, RHIPipeline*& pPipelines) override;
+        bool createRayTracingPipelines(RHIPipelineCache* pipelineCache, uint32_t createInfoCount, const RHIRayTracingPipelineCreateInfo* pCreateInfos, RHIPipeline* &pPipelines) override;
+        
+        // 内存管理相关接口
+        RHIResult allocateDescriptorSets(RHIDescriptorSetLayout* layout, RHIDescriptorSet*& descriptor_set) override;
+        RHIResult createBuffer(const RHIBufferCreateInfo* create_info, RHIBuffer*& buffer) override;
+        RHIResult createImageView(const RHIImageViewCreateInfo* create_info, RHIImageView*& image_view) override;
+        void getBufferMemoryRequirements(RHIBuffer* buffer, RHIMemoryRequirements* pMemoryRequirements) override;
+        RHIResult allocateMemory(const RHIMemoryAllocateInfo* pAllocateInfo, RHIDeviceMemory*& pMemory) override;
+        RHIResult bindBufferMemory(RHIBuffer* buffer, RHIDeviceMemory* memory, RHIDeviceSize memory_offset) override;
+        void getImageMemoryRequirements(RHIImage* image, RHIMemoryRequirements* memory_requirements) override;
+        RHIResult bindImageMemory(RHIImage* image, RHIDeviceMemory* memory, RHIDeviceSize memory_offset) override;
+        RHIResult createImage(const RHIImageCreateInfo* create_info, RHIImage*& image) override;
+        uint32_t findMemoryType(uint32_t type_filter, RHIMemoryPropertyFlags properties) override;
+        
+        // 光线追踪加速结构相关接口
+        bool createAccelerationStructure(const RHIAccelerationStructureCreateInfo* pCreateInfo, RHIAccelerationStructure* &pAccelerationStructure) override;
+        bool buildAccelerationStructure(RHICommandBuffer* commandBuffer, const RHIAccelerationStructureBuildInfo* pBuildInfo) override;
+        void getAccelerationStructureDeviceAddress(const RHIAccelerationStructureDeviceAddressInfo* pInfo, RHIDeviceAddress* pAddress) override;
+        RHIDeviceAddress getBufferDeviceAddress(RHIBuffer* buffer) override;
+        
+        // 光线追踪着色器绑定表相关接口
+        bool createShaderBindingTable(const RHIShaderBindingTableCreateInfo* pCreateInfo, RHIPipeline* pipeline, RHIBuffer* &pBuffer, VmaAllocation* pAllocation) override;
+        
+        // 光线追踪渲染命令
+        void cmdTraceRays(RHICommandBuffer* commandBuffer, const RHITraceRaysInfo* pTraceRaysInfo) override;
+        
+        // 光线追踪相关方法
+        uint32_t getRayTracingShaderGroupHandleSize() override;
+        uint32_t getRayTracingShaderGroupBaseAlignment() override;
+        RHIResult getRayTracingShaderGroupHandlesKHR(RHIPipeline* pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData) override;
+        RHIResult createRayTracingPipelinesKHR(uint32_t create_info_count, const RHIRayTracingPipelineCreateInfo* create_infos, RHIPipeline*& pipelines) override;
+        
         bool createPipelineLayout(const RHIPipelineLayoutCreateInfo* pCreateInfo, RHIPipelineLayout* &pPipelineLayout) override;
         bool createRenderPass(const RHIRenderPassCreateInfo* pCreateInfo, RHIRenderPass* &pRenderPass) override;
         bool createSampler(const RHISamplerCreateInfo* pCreateInfo, RHISampler* &pSampler) override;
@@ -231,6 +263,16 @@ namespace Elish
         PFN_vkCmdDrawIndexed        _vkCmdDrawIndexed;
         PFN_vkCmdClearAttachments   _vkCmdClearAttachments;
         PFN_vkCmdPushConstants      _vkCmdPushConstants;
+        
+        // 光线追踪相关函数指针
+        PFN_vkCreateAccelerationStructureKHR _vkCreateAccelerationStructureKHR;
+        PFN_vkDestroyAccelerationStructureKHR _vkDestroyAccelerationStructureKHR;
+        PFN_vkGetAccelerationStructureDeviceAddressKHR _vkGetAccelerationStructureDeviceAddressKHR;
+        PFN_vkGetAccelerationStructureBuildSizesKHR _vkGetAccelerationStructureBuildSizesKHR;
+        PFN_vkCmdBuildAccelerationStructuresKHR _vkCmdBuildAccelerationStructuresKHR;
+        PFN_vkCreateRayTracingPipelinesKHR _vkCreateRayTracingPipelinesKHR;
+        PFN_vkGetRayTracingShaderGroupHandlesKHR _vkGetRayTracingShaderGroupHandlesKHR;
+        PFN_vkCmdTraceRaysKHR _vkCmdTraceRaysKHR;
 
         // global descriptor pool
         VkDescriptorPool m_vk_descriptor_pool;
@@ -253,12 +295,33 @@ namespace Elish
         const std::vector<char const*> m_validation_layers {"VK_LAYER_KHRONOS_validation"};
         uint32_t                       m_vulkan_api_version {VK_API_VERSION_1_0};
 
-        std::vector<char const*> m_device_extensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+        std::vector<char const*> m_device_extensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+            // 光线追踪相关扩展
+            VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME,
+            VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+            VK_KHR_RAY_QUERY_EXTENSION_NAME,
+            VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+            // 光线追踪依赖的扩展
+            VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+            VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,
+            VK_KHR_SPIRV_1_4_EXTENSION_NAME,
+            VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME
+        };
 
         // default sampler cache
         RHISampler* m_linear_sampler = nullptr;
         RHISampler* m_nearest_sampler = nullptr;
         std::map<uint32_t, RHISampler*> m_mipmap_sampler_map;
+
+        // 光线追踪相关成员变量
+        VkPhysicalDeviceRayTracingPipelinePropertiesKHR m_rt_pipeline_properties{};
+        VkPhysicalDeviceAccelerationStructurePropertiesKHR m_as_properties{};
+        VkPhysicalDeviceRayTracingPipelineFeaturesKHR m_rt_pipeline_features{};
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR m_as_features{};
+        VkPhysicalDeviceBufferDeviceAddressFeaturesKHR m_buffer_device_address_features{};
+        VkPhysicalDeviceDescriptorIndexingFeaturesEXT m_descriptor_indexing_features{};
+        bool m_ray_tracing_supported{ false };
 
     private:
         void createInstance();
@@ -274,6 +337,11 @@ namespace Elish
 
     public:
         bool isPointLightShadowEnabled() override;
+        
+        // 光线追踪相关查询接口
+        bool isRayTracingSupported() override { return m_ray_tracing_supported; }
+        const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& getRayTracingPipelineProperties() const { return m_rt_pipeline_properties; }
+        const VkPhysicalDeviceAccelerationStructurePropertiesKHR& getAccelerationStructureProperties() const { return m_as_properties; }
 
     private:
         bool m_enable_validation_Layers{ true };

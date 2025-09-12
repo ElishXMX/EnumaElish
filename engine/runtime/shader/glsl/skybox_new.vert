@@ -13,7 +13,7 @@ layout(push_constant) uniform PushConstants {
 } pushConstants;
 
 // 输出到片段着色器的纹理坐标
-layout(location = 0) out vec3 fragTexCoord;
+layout(location = 0) out vec3 texCoords;
 
 void main()
 {
@@ -45,8 +45,8 @@ void main()
         1, 5, 6,  6, 2, 1
     );
     
+    // 获取当前顶点的位置
     vec3 localPosition = cubeVertices[cubeIndices[gl_VertexIndex]];
-
     
     // 计算世界空间位置（以相机为中心的大立方体）
     vec3 worldPosition = pushConstants.cameraPosition + localPosition * 1000.0;
@@ -60,5 +60,5 @@ void main()
     gl_Position = clipPosition;
     
     // 传递纹理坐标（使用本地位置作为立方体贴图坐标）
-    fragTexCoord = localPosition;
+    texCoords = localPosition;
 }

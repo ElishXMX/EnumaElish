@@ -4,6 +4,10 @@
 #include "../../3rdparty/stb/stb_image.h"
 #include "../shader/generated/cpp/PBR_vert.h"
 #include "../shader/generated/cpp/PBR_frag.h"
+#include "../shader/generated/cpp/raytracing_rgen.h"
+#include "../shader/generated/cpp/raytracing_rchit.h"
+#include "../shader/generated/cpp/raytracing_rmiss.h"
+#include "../shader/generated/cpp/shadow_rmiss.h"
 #include "interface/vulkan/vulkan_util.h"
 #include <unordered_map>
 
@@ -80,6 +84,15 @@ namespace Elish
     void RenderResource::addRenderObject(const RenderObject& renderObject)
     {
         m_RenderObjects.push_back(renderObject);
+    }
+    
+    /**
+     * @brief 清空所有渲染对象
+     */
+    void RenderResource::clearAllRenderObjects()
+    {
+        m_RenderObjects.clear();
+        LOG_INFO("[RenderResource::clearAllRenderObjects] Cleared all render objects");
     }
     
     /**
@@ -571,14 +584,14 @@ namespace Elish
             return true;
         }
         
-        // PBR shader expects: binding 0 (MVP UBO), binding 1 (View UBO), binding 2 (cubemap), binding 3-7 (textures)
-        std::vector<RHIDescriptorSetLayoutBinding> model_bindings(8);
+        // PBR shader expects: binding 0 (MVP UBO), binding 1 (View UBO), binding 2 (cubemap), binding 3-7 (textures), binding 8 (shadow map), binding 9 (light space matrix UBO)
+        std::vector<RHIDescriptorSetLayoutBinding> model_bindings(10);
 
-        // Binding 0: Fixed UBO binding(MVP)
+        // Binding 0: Fixed UBO binding(MVP) - 修复：片段着色器也使用此UBO，需要包含片段阶段标志
         model_bindings[0].binding = 0;
         model_bindings[0].descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         model_bindings[0].descriptorCount = 1;
-        model_bindings[0].stageFlags = RHI_SHADER_STAGE_VERTEX_BIT;
+        model_bindings[0].stageFlags = RHI_SHADER_STAGE_VERTEX_BIT | RHI_SHADER_STAGE_FRAGMENT_BIT;
         model_bindings[0].pImmutableSamplers = nullptr;
         // Binding 1: Fixed UBO binding（视图矩阵）
         model_bindings[1].binding = 1;
@@ -593,7 +606,7 @@ namespace Elish
         model_bindings[2].stageFlags = RHI_SHADER_STAGE_FRAGMENT_BIT;
         model_bindings[2].pImmutableSamplers = nullptr;
 
-        // Bindings 3 to layout_size-1: Texture sampler bindings
+        // Bindings 3 to 7: Texture sampler bindings
         for (uint32_t i = 3; i < 8; ++i) {
             model_bindings[i].binding = i;
             model_bindings[i].descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -601,10 +614,24 @@ namespace Elish
             model_bindings[i].stageFlags = RHI_SHADER_STAGE_FRAGMENT_BIT;
             model_bindings[i].pImmutableSamplers = nullptr;
         }
+        
+        // Binding 8: 方向光阴影贴图绑定
+        model_bindings[8].binding = 8;
+        model_bindings[8].descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        model_bindings[8].descriptorCount = 1;
+        model_bindings[8].stageFlags = RHI_SHADER_STAGE_FRAGMENT_BIT;
+        model_bindings[8].pImmutableSamplers = nullptr;
+        
+        // Binding 9: 光源投影视图矩阵UBO绑定
+        model_bindings[9].binding = 9;
+        model_bindings[9].descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        model_bindings[9].descriptorCount = 1;
+        model_bindings[9].stageFlags = RHI_SHADER_STAGE_VERTEX_BIT;
+        model_bindings[9].pImmutableSamplers = nullptr;
 
         RHIDescriptorSetLayoutCreateInfo model_layoutInfo{};
         model_layoutInfo.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        model_layoutInfo.bindingCount = 8;
+        model_layoutInfo.bindingCount = 10;
         model_layoutInfo.pBindings = model_bindings.data();
         
         if (m_rhi->createDescriptorSetLayout(&model_layoutInfo, m_modelPipelineResource.descriptorSetLayout) != RHI_SUCCESS) {
@@ -765,37 +792,45 @@ namespace Elish
      * @return True if the cubemap is loaded successfully, false otherwise.
      */
     bool RenderResource::loadCubemapTexture(const std::array<std::string, 6>& cubemapFiles) {
+        LOG_INFO("[Skybox] Starting cubemap texture loading");
         std::array<void*, 6> pixels;
         int texWidth, texHeight, texChannels;
 
         for (int i = 0; i < 6; ++i) {
+            LOG_DEBUG("[Skybox] Loading cubemap face {}: {}", i, cubemapFiles[i]);
             pixels[i] = stbi_load(cubemapFiles[i].c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
             if (!pixels[i]) {
-                LOG_ERROR("[RenderResource::loadCubemapTexture] Failed to load cubemap image: {}", cubemapFiles[i]);
+                LOG_ERROR("[Skybox] Failed to load cubemap image: {}", cubemapFiles[i]);
                 for (int j = 0; j < i; ++j) {
                     stbi_image_free(pixels[j]);
                 }
                 return false;
             }
+            LOG_DEBUG("[Skybox] Successfully loaded cubemap face {} ({}x{}, {} channels)", i, texWidth, texHeight, texChannels);
         }
         uint32_t miplevels =
             static_cast<uint32_t>(
                 std::floor(log2(std::max(texWidth, texHeight)))) +
             1;
+        LOG_DEBUG("[Skybox] Creating cubemap with dimensions {}x{}, {} mip levels", texWidth, texHeight, miplevels);
+        
         // Create cubemap using RHI
         m_rhi->createCubeMap(m_cubemapImage, m_cubemapImageView, m_cubemapImageAllocation, texWidth, texHeight, pixels, RHI_FORMAT_R8G8B8A8_UNORM, miplevels);
+        LOG_DEBUG("[Skybox] Cubemap image and image view created successfully");
 
         // Create cubemap sampler
         cubemapSampler = m_rhi->getOrCreateDefaultSampler(Default_Sampler_Linear);
         if (!cubemapSampler) {
-            LOG_ERROR("[RenderResource::loadCubemapTexture] Failed to create cubemap sampler");
+            LOG_ERROR("[Skybox] Failed to create cubemap sampler");
             return false;
         }
+        LOG_DEBUG("[Skybox] Cubemap sampler created successfully");
 
         for (int i = 0; i < 6; ++i) {
             stbi_image_free(pixels[i]);
         }
 
+        LOG_INFO("[Skybox] Cubemap texture loading completed successfully");
         return true;
     }
 
@@ -860,6 +895,481 @@ namespace Elish
             isPlatform = json["isPlatform"].bool_value();
         }
 
+        return true;
+    }
+
+    // ========================================================================
+    // 方向光源管理接口实现
+    // ========================================================================
+    
+    size_t RenderResource::addDirectionalLight(const DirectionalLightData& lightData)
+    {
+        m_directionalLights.push_back(lightData);
+        size_t index = m_directionalLights.size() - 1;
+        LOG_INFO("[RenderResource::addDirectionalLight] Added directional light at index: {}", index);
+        return index;
+    }
+    
+    bool RenderResource::updateDirectionalLight(size_t index, const DirectionalLightData& lightData)
+    {
+        if (index >= m_directionalLights.size()) {
+            LOG_ERROR("[RenderResource::updateDirectionalLight] Invalid light index: {}", index);
+            return false;
+        }
+        
+        m_directionalLights[index] = lightData;
+        LOG_INFO("[RenderResource::updateDirectionalLight] Updated directional light at index: {}", index);
+        return true;
+    }
+    
+    bool RenderResource::removeDirectionalLight(size_t index)
+    {
+        if (index >= m_directionalLights.size()) {
+            LOG_ERROR("[RenderResource::removeDirectionalLight] Invalid light index: {}", index);
+            return false;
+        }
+        
+        m_directionalLights.erase(m_directionalLights.begin() + index);
+        LOG_INFO("[RenderResource::removeDirectionalLight] Removed directional light at index: {}", index);
+        return true;
+    }
+    
+    const DirectionalLightData* RenderResource::getDirectionalLight(size_t index) const
+    {
+        if (index >= m_directionalLights.size()) {
+            return nullptr;
+        }
+        return &m_directionalLights[index];
+    }
+    
+    void RenderResource::clearDirectionalLights()
+    {
+        m_directionalLights.clear();
+        LOG_INFO("[RenderResource::clearDirectionalLights] Cleared all directional lights");
+    }
+    
+    const DirectionalLightData* RenderResource::getPrimaryDirectionalLight() const
+    {
+        for (const auto& light : m_directionalLights) {
+            if (light.enabled) {
+                return &light;
+            }
+        }
+        return nullptr;
+    }
+    
+    bool RenderResource::updateDirectionalLightDirection(const glm::vec3& direction)
+    {
+        // 查找第一个启用的方向光源
+        for (size_t i = 0; i < m_directionalLights.size(); ++i) {
+            if (m_directionalLights[i].enabled) {
+                m_directionalLights[i].direction = glm::normalize(direction);
+                LOG_INFO("[RenderResource::updateDirectionalLightDirection] Updated light direction to ({:.3f}, {:.3f}, {:.3f})", 
+                         direction.x, direction.y, direction.z);
+                return true;
+            }
+        }
+        
+        LOG_WARN("[RenderResource::updateDirectionalLightDirection] No enabled directional light found");
+        return false;
+    }
+    
+    bool RenderResource::updateDirectionalLightIntensity(float intensity)
+    {
+        // 查找第一个启用的方向光源
+        for (size_t i = 0; i < m_directionalLights.size(); ++i) {
+            if (m_directionalLights[i].enabled) {
+                m_directionalLights[i].intensity = std::max(0.0f, intensity);
+                LOG_INFO("[RenderResource::updateDirectionalLightIntensity] Updated light intensity to {:.3f}", intensity);
+                return true;
+            }
+        }
+        
+        LOG_WARN("[RenderResource::updateDirectionalLightIntensity] No enabled directional light found");
+        return false;
+    }
+    
+    bool RenderResource::updateDirectionalLightColor(const glm::vec3& color)
+    {
+        // 查找第一个启用的方向光源
+        for (size_t i = 0; i < m_directionalLights.size(); ++i) {
+            if (m_directionalLights[i].enabled) {
+                // 确保颜色值在合理范围内
+                m_directionalLights[i].color = glm::clamp(color, glm::vec3(0.0f), glm::vec3(1.0f));
+                LOG_INFO("[RenderResource::updateDirectionalLightColor] Updated light color to ({:.3f}, {:.3f}, {:.3f})", 
+                         color.r, color.g, color.b);
+                return true;
+            }
+        }
+        
+        LOG_WARN("[RenderResource::updateDirectionalLightColor] No enabled directional light found");
+        return false;
+    }
+    
+    bool RenderResource::updateDirectionalLightDistance(float distance)
+    {
+        // 查找第一个启用的方向光源
+        for (size_t i = 0; i < m_directionalLights.size(); ++i) {
+            if (m_directionalLights[i].enabled) {
+                // 确保距离值在合理范围内
+                m_directionalLights[i].distance = std::max(1.0f, std::min(distance, 100.0f));
+                LOG_INFO("[RenderResource::updateDirectionalLightDistance] Updated light distance to {:.3f}", distance);
+                return true;
+            }
+        }
+        
+        LOG_WARN("[RenderResource::updateDirectionalLightDistance] No enabled directional light found");
+        return false;
+    }
+    
+    /**
+     * @brief 创建光线追踪管线资源
+     * @return 创建是否成功
+     */
+    bool RenderResource::createRayTracingPipelineResource()
+    {
+        if (!m_rhi) {
+            LOG_ERROR("[RenderResource::createRayTracingPipelineResource] RHI pointer is null!");
+            return false;
+        }
+        
+        if (m_rayTracingPipelineResourceCreated) {
+            LOG_INFO("[RenderResource::createRayTracingPipelineResource] Ray tracing pipeline resource already created");
+            return true;
+        }
+        
+        // 创建光线追踪描述符集布局
+        std::vector<RHIDescriptorSetLayoutBinding> rt_bindings(6);
+        
+        // Binding 0: 加速结构（TLAS）
+        rt_bindings[0].binding = 0;
+        rt_bindings[0].descriptorType = RHI_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        rt_bindings[0].descriptorCount = 1;
+        rt_bindings[0].stageFlags = RHI_SHADER_STAGE_RAYGEN_BIT_KHR | RHI_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+        rt_bindings[0].pImmutableSamplers = nullptr;
+        
+        // Binding 1: 光线追踪输出图像
+        rt_bindings[1].binding = 1;
+        rt_bindings[1].descriptorType = RHI_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        rt_bindings[1].descriptorCount = 1;
+        rt_bindings[1].stageFlags = RHI_SHADER_STAGE_RAYGEN_BIT_KHR;
+        rt_bindings[1].pImmutableSamplers = nullptr;
+        
+        // Binding 2: 顶点缓冲区
+        rt_bindings[2].binding = 2;
+        rt_bindings[2].descriptorType = RHI_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        rt_bindings[2].descriptorCount = 1;
+        rt_bindings[2].stageFlags = RHI_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+        rt_bindings[2].pImmutableSamplers = nullptr;
+        
+        // Binding 3: 索引缓冲区
+        rt_bindings[3].binding = 3;
+        rt_bindings[3].descriptorType = RHI_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        rt_bindings[3].descriptorCount = 1;
+        rt_bindings[3].stageFlags = RHI_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+        rt_bindings[3].pImmutableSamplers = nullptr;
+        
+        // Binding 4: 材质纹理数组
+        rt_bindings[4].binding = 4;
+        rt_bindings[4].descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        rt_bindings[4].descriptorCount = 5; // 支持5个纹理（diffuse, normal, metallic, roughness, ao）
+        rt_bindings[4].stageFlags = RHI_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+        rt_bindings[4].pImmutableSamplers = nullptr;
+        
+        // Binding 5: 相机参数UBO
+        rt_bindings[5].binding = 5;
+        rt_bindings[5].descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        rt_bindings[5].descriptorCount = 1;
+        rt_bindings[5].stageFlags = RHI_SHADER_STAGE_RAYGEN_BIT_KHR;
+        rt_bindings[5].pImmutableSamplers = nullptr;
+        
+        RHIDescriptorSetLayoutCreateInfo rt_layoutInfo{};
+        rt_layoutInfo.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        rt_layoutInfo.bindingCount = static_cast<uint32_t>(rt_bindings.size());
+        rt_layoutInfo.pBindings = rt_bindings.data();
+        
+        if (m_rhi->createDescriptorSetLayout(&rt_layoutInfo, m_rayTracingPipelineResource.descriptorSetLayout) != RHI_SUCCESS) {
+            LOG_ERROR("[RenderResource::createRayTracingPipelineResource] Failed to create descriptor set layout");
+            return false;
+        }
+        
+        // 创建管线布局
+        RHIDescriptorSetLayout* descriptorSetLayouts[] = {m_rayTracingPipelineResource.descriptorSetLayout};
+        
+        RHIPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = RHI_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutInfo.setLayoutCount = 1;
+        pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts;
+        pipelineLayoutInfo.pushConstantRangeCount = 0;
+        pipelineLayoutInfo.pPushConstantRanges = nullptr;
+        
+        if (m_rhi->createPipelineLayout(&pipelineLayoutInfo, m_rayTracingPipelineResource.pipelineLayout) != RHI_SUCCESS) {
+            LOG_ERROR("[RenderResource::createRayTracingPipelineResource] Failed to create pipeline layout");
+            delete m_rayTracingPipelineResource.descriptorSetLayout;
+            return false;
+        }
+        
+        // 创建着色器模块
+        RHIShader* raygenShader = m_rhi->createShaderModule(RAYTRACING_RGEN);
+        RHIShader* missShader = m_rhi->createShaderModule(RAYTRACING_RMISS);
+        RHIShader* shadowMissShader = m_rhi->createShaderModule(SHADOW_RMISS);
+        RHIShader* closestHitShader = m_rhi->createShaderModule(RAYTRACING_RCHIT);
+        
+        if (!raygenShader || !missShader || !shadowMissShader || !closestHitShader) {
+            LOG_ERROR("[RenderResource::createRayTracingPipelineResource] Failed to create shader modules");
+            if (raygenShader) m_rhi->destroyShaderModule(raygenShader);
+            if (missShader) m_rhi->destroyShaderModule(missShader);
+            if (shadowMissShader) m_rhi->destroyShaderModule(shadowMissShader);
+            if (closestHitShader) m_rhi->destroyShaderModule(closestHitShader);
+            delete m_rayTracingPipelineResource.pipelineLayout;
+            delete m_rayTracingPipelineResource.descriptorSetLayout;
+            return false;
+        }
+        
+        // 创建着色器阶段信息
+        std::vector<RHIPipelineShaderStageCreateInfo> shaderStages(4);
+        
+        // Raygen着色器
+        shaderStages[0].sType = RHI_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStages[0].stage = RHI_SHADER_STAGE_RAYGEN_BIT_KHR;
+        shaderStages[0].module = raygenShader;
+        shaderStages[0].pName = "main";
+        
+        // Miss着色器
+        shaderStages[1].sType = RHI_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStages[1].stage = RHI_SHADER_STAGE_MISS_BIT_KHR;
+        shaderStages[1].module = missShader;
+        shaderStages[1].pName = "main";
+        
+        // Shadow Miss着色器
+        shaderStages[2].sType = RHI_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStages[2].stage = RHI_SHADER_STAGE_MISS_BIT_KHR;
+        shaderStages[2].module = shadowMissShader;
+        shaderStages[2].pName = "main";
+        
+        // Closest Hit着色器
+        shaderStages[3].sType = RHI_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        shaderStages[3].stage = RHI_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+        shaderStages[3].module = closestHitShader;
+        shaderStages[3].pName = "main";
+        
+        // 创建着色器组
+        std::vector<RHIRayTracingShaderGroupCreateInfo> shaderGroups(4);
+        
+        // Raygen组
+        shaderGroups[0].sType = RHI_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+        shaderGroups[0].type = RHI_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+        shaderGroups[0].generalShader = 0;
+        shaderGroups[0].closestHitShader = RHI_SHADER_UNUSED_KHR;
+        shaderGroups[0].anyHitShader = RHI_SHADER_UNUSED_KHR;
+        shaderGroups[0].intersectionShader = RHI_SHADER_UNUSED_KHR;
+        
+        // Miss组
+        shaderGroups[1].sType = RHI_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+        shaderGroups[1].type = RHI_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+        shaderGroups[1].generalShader = 1;
+        shaderGroups[1].closestHitShader = RHI_SHADER_UNUSED_KHR;
+        shaderGroups[1].anyHitShader = RHI_SHADER_UNUSED_KHR;
+        shaderGroups[1].intersectionShader = RHI_SHADER_UNUSED_KHR;
+        
+        // Shadow Miss组
+        shaderGroups[2].sType = RHI_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+        shaderGroups[2].type = RHI_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+        shaderGroups[2].generalShader = 2;
+        shaderGroups[2].closestHitShader = RHI_SHADER_UNUSED_KHR;
+        shaderGroups[2].anyHitShader = RHI_SHADER_UNUSED_KHR;
+        shaderGroups[2].intersectionShader = RHI_SHADER_UNUSED_KHR;
+        
+        // Closest Hit组
+        shaderGroups[3].sType = RHI_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+        shaderGroups[3].type = RHI_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+        shaderGroups[3].generalShader = RHI_SHADER_UNUSED_KHR;
+        shaderGroups[3].closestHitShader = 3;
+        shaderGroups[3].anyHitShader = RHI_SHADER_UNUSED_KHR;
+        shaderGroups[3].intersectionShader = RHI_SHADER_UNUSED_KHR;
+        
+        // 创建光线追踪管线
+        RHIRayTracingPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = RHI_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+        pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+        pipelineInfo.pStages = shaderStages.data();
+        pipelineInfo.groupCount = static_cast<uint32_t>(shaderGroups.size());
+        pipelineInfo.pGroups = shaderGroups.data();
+        pipelineInfo.maxPipelineRayRecursionDepth = 2; // 支持2层递归（主光线+阴影光线）
+        pipelineInfo.layout = m_rayTracingPipelineResource.pipelineLayout;
+        pipelineInfo.basePipelineHandle = nullptr;
+        pipelineInfo.basePipelineIndex = -1;
+        
+        if (m_rhi->createRayTracingPipelines(nullptr, 1, &pipelineInfo, m_rayTracingPipelineResource.rayTracingPipeline) != RHI_SUCCESS) {
+            LOG_ERROR("[RenderResource::createRayTracingPipelineResource] Failed to create ray tracing pipeline");
+            m_rhi->destroyShaderModule(raygenShader);
+            m_rhi->destroyShaderModule(missShader);
+            m_rhi->destroyShaderModule(shadowMissShader);
+            m_rhi->destroyShaderModule(closestHitShader);
+            delete m_rayTracingPipelineResource.pipelineLayout;
+            delete m_rayTracingPipelineResource.descriptorSetLayout;
+            return false;
+        }
+        
+        // 创建着色器绑定表（SBT）
+        // TODO: 实现SBT创建逻辑
+        m_rayTracingPipelineResource.shaderBindingTable = nullptr;
+        m_rayTracingPipelineResource.shaderBindingTableAllocation = VK_NULL_HANDLE;
+        
+        // 清理着色器模块
+        m_rhi->destroyShaderModule(raygenShader);
+        m_rhi->destroyShaderModule(missShader);
+        m_rhi->destroyShaderModule(shadowMissShader);
+        m_rhi->destroyShaderModule(closestHitShader);
+        
+        m_rayTracingPipelineResourceCreated = true;
+        LOG_INFO("[RenderResource::createRayTracingPipelineResource] Ray tracing pipeline resource created successfully");
+        
+        return true;
+    }
+    
+    /**
+     * @brief 创建光线追踪资源（加速结构等）
+     * @return 创建是否成功
+     */
+    bool RenderResource::createRayTracingResource()
+    {
+        if (!m_rhi) {
+            LOG_ERROR("[RenderResource::createRayTracingResource] RHI pointer is null!");
+            return false;
+        }
+        
+        if (m_rayTracingResourceCreated) {
+            LOG_INFO("[RenderResource::createRayTracingResource] Ray tracing resource already created");
+            return true;
+        }
+        
+        if (m_RenderObjects.empty()) {
+            LOG_WARN("[RenderResource::createRayTracingResource] No render objects available for acceleration structure creation");
+            return false;
+        }
+        
+        // 创建底层加速结构（BLAS）
+        m_rayTracingResource.bottomLevelAS.resize(m_RenderObjects.size());
+        m_rayTracingResource.bottomLevelASBuffers.resize(m_RenderObjects.size());
+        m_rayTracingResource.bottomLevelASAllocations.resize(m_RenderObjects.size());
+        
+        for (size_t i = 0; i < m_RenderObjects.size(); ++i) {
+            const auto& renderObject = m_RenderObjects[i];
+            
+            // 创建BLAS几何信息
+            RHIAccelerationStructureGeometry geometry{};
+            geometry.sType = RHI_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+            geometry.geometryType = RHI_GEOMETRY_TYPE_TRIANGLES_KHR;
+            geometry.triangles.vertexData.deviceAddress = 0; // 需要从缓冲区获取设备地址
+            geometry.triangles.vertexStride = sizeof(Vertex);
+            geometry.triangles.vertexFormat = RHI_FORMAT_R32G32B32_SFLOAT;
+            geometry.triangles.indexData.deviceAddress = 0; // 需要从缓冲区获取设备地址
+            geometry.triangles.indexType = RHI_INDEX_TYPE_UINT32;
+            geometry.flags = RHI_GEOMETRY_OPAQUE_BIT_KHR;
+            
+            // 创建BLAS构建信息
+            RHIAccelerationStructureBuildGeometryInfoKHR buildInfo{};
+            buildInfo.sType = RHI_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+            buildInfo.type = RHI_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+            buildInfo.flags = RHI_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+            buildInfo.geometryCount = 1;
+            buildInfo.pGeometries = &geometry;
+            
+            // 创建BLAS
+            RHIAccelerationStructureCreateInfo createInfo{};
+            createInfo.sType = RHI_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+            createInfo.type = RHI_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+            createInfo.size = 0; // 将在构建时确定
+            
+            if (m_rhi->createAccelerationStructure(&createInfo, m_rayTracingResource.bottomLevelAS[i]) != RHI_SUCCESS) {
+                LOG_ERROR("[RenderResource::createRayTracingResource] Failed to create BLAS {}", i);
+                return false;
+            }
+        }
+        
+        // 创建顶层加速结构（TLAS）
+        RHIAccelerationStructureCreateInfo tlasCreateInfo{};
+        tlasCreateInfo.sType = RHI_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+        tlasCreateInfo.type = RHI_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;
+        tlasCreateInfo.size = 0; // 将在构建时确定
+        
+        if (m_rhi->createAccelerationStructure(&tlasCreateInfo, m_rayTracingResource.topLevelAS) != RHI_SUCCESS) {
+            LOG_ERROR("[RenderResource::createRayTracingResource] Failed to create TLAS");
+            return false;
+        }
+        
+        // 创建光线追踪输出图像
+        // TODO: 从渲染器获取实际的屏幕尺寸
+        uint32_t width = 1920;
+        uint32_t height = 1080;
+        
+        RHIImageCreateInfo imageInfo{};
+        imageInfo.sType = RHI_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = RHI_IMAGE_TYPE_2D;
+        imageInfo.extent.width = width;
+        imageInfo.extent.height = height;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = RHI_FORMAT_R8G8B8A8_UNORM;
+        imageInfo.tiling = RHI_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = RHI_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = RHI_IMAGE_USAGE_STORAGE_BIT | RHI_IMAGE_USAGE_TRANSFER_SRC_BIT;
+        imageInfo.samples = RHI_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = RHI_SHARING_MODE_EXCLUSIVE;
+        
+        if (m_rhi->createImage(&imageInfo, m_rayTracingResource.rayTracingOutputImage) != RHI_SUCCESS) {
+            LOG_ERROR("[RenderResource::createRayTracingResource] Failed to create ray tracing output image");
+            return false;
+        }
+        
+        // 创建图像视图
+        RHIImageViewCreateInfo viewInfo{};
+        viewInfo.sType = RHI_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = m_rayTracingResource.rayTracingOutputImage;
+        viewInfo.viewType = RHI_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = RHI_FORMAT_R8G8B8A8_UNORM;
+        viewInfo.subresourceRange.aspectMask = RHI_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
+        
+        if (m_rhi->createImageView(&viewInfo, m_rayTracingResource.rayTracingOutputImageView) != RHI_SUCCESS) {
+            LOG_ERROR("[RenderResource::createRayTracingResource] Failed to create ray tracing output image view");
+            return false;
+        }
+        
+        m_rayTracingResourceCreated = true;
+        LOG_INFO("[RenderResource::createRayTracingResource] Ray tracing resource created successfully");
+        
+        return true;
+    }
+    
+    /**
+     * @brief 更新光线追踪加速结构
+     * @return 更新是否成功
+     */
+    bool RenderResource::updateRayTracingAccelerationStructures()
+    {
+        if (!m_rhi) {
+            LOG_ERROR("[RenderResource::updateRayTracingAccelerationStructures] RHI pointer is null!");
+            return false;
+        }
+        
+        if (!m_rayTracingResourceCreated) {
+            LOG_WARN("[RenderResource::updateRayTracingAccelerationStructures] Ray tracing resource not created yet");
+            return false;
+        }
+        
+        // TODO: 实现加速结构更新逻辑
+        // 这里应该包括：
+        // 1. 更新实例缓冲区
+        // 2. 重建TLAS
+        // 3. 处理动态对象的BLAS更新
+        
+        LOG_INFO("[RenderResource::updateRayTracingAccelerationStructures] Acceleration structures updated successfully");
         return true;
     }
 

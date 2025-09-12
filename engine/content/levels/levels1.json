@@ -33,6 +33,16 @@
                         "engine/runtime/content/textures/steath_r.png",
                         "engine/runtime/content/textures/steath_n.png",
                         "engine/runtime/content/textures/steath_o.png"]
+                }  ,
+                {
+                    "name": "marble_table",
+                    "model_paths": "engine/runtime/content/models/marble_table.obj",
+                    "model_texture_map": 
+                    [   "engine/runtime/content/textures/marble_table_BaseColor.jpg",
+                        "engine/runtime/content/textures/steath_m.png",
+                        "engine/runtime/content/textures/marble_table_Roughness.jpg",
+                        "engine/runtime/content/textures/marble_table_NormalOpenGl.jpg",
+                        "engine/runtime/content/textures/steath_o.png"]
                 }  
             ]
         }

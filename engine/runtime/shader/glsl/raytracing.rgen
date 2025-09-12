@@ -1,0 +1,59 @@
+#version 460
+#extension GL_NV_ray_tracing : require
+
+/**
+ * @file raytracing.rgen
+ * @brief 光线追踪生成着色器（Ray Generation Shader）
+ * @details 负责生成主要的光线，是光线追踪管线的入口点
+ *          每个像素都会执行一次此着色器，生成相机光线
+ */
+
+// 光线追踪加速结构
+layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+
+// 输出图像
+layout(binding = 1, set = 0, rgba8) uniform image2D image;
+
+// 相机参数
+layout(binding = 2, set = 0) uniform CameraBuffer {
+    mat4 viewInverse;     // 视图矩阵的逆矩阵
+    mat4 projInverse;     // 投影矩阵的逆矩阵
+    vec4 lightPos;        // 光源位置
+    vec4 lightColor;      // 光源颜色
+} cam;
+
+// 光线负载结构
+layout(location = 0) rayPayloadNV vec3 hitValue;
+
+void main() 
+{
+    // 获取当前像素坐标
+    const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
+    const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
+    vec2 d = inUV * 2.0 - 1.0;
+
+    // 计算光线起点和方向
+    vec4 origin = cam.viewInverse * vec4(0,0,0,1);
+    vec4 target = cam.projInverse * vec4(d.x, d.y, 1, 1);
+    vec4 direction = cam.viewInverse * vec4(normalize(target.xyz), 0);
+
+    // 初始化光线负载
+    hitValue = vec3(0.0);
+
+    // 发射光线
+    traceNV(topLevelAS,           // 加速结构
+               gl_RayFlagsOpaqueNV,  // 光线标志
+               0xff,                 // 剔除掩码
+               0,                    // sbtRecordOffset
+               0,                    // sbtRecordStride
+               0,                    // missIndex
+               origin.xyz,           // 光线起点
+               0.001,                // tmin
+               direction.xyz,        // 光线方向
+               10000.0,              // tmax
+               0                     // payload location
+    );
+
+    // 将结果写入输出图像
+    imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(hitValue, 1.0));
+}

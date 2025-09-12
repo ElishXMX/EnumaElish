@@ -61,6 +61,7 @@ namespace Elish
         
 
         // load cubemap
+        LOG_INFO("[Skybox] Initializing cubemap resources for skybox rendering");
         std::array<std::string, 6> cubemapFiles = {
             "engine/content/textures/cubemap_X0.png",
             "engine/content/textures/cubemap_X1.png",
@@ -69,7 +70,12 @@ namespace Elish
             "engine/content/textures/cubemap_Z4.png",
             "engine/content/textures/cubemap_Z5.png",
         };
-        m_render_resource->loadCubemapTexture(cubemapFiles);
+        bool cubemapLoadSuccess = m_render_resource->loadCubemapTexture(cubemapFiles);
+        if (cubemapLoadSuccess) {
+            LOG_INFO("[Skybox] Cubemap resources initialized successfully");
+        } else {
+            LOG_ERROR("[Skybox] Failed to initialize cubemap resources - skybox rendering may not work properly");
+        }
         
         // initialize render pipeline
         m_render_pipeline        = std::make_shared<RenderPipeline>();
@@ -153,13 +159,13 @@ namespace Elish
                     renderObject.animationParams = model_animation_params.at(modelName);
                     // LOG_DEBUG("Applied loaded animation params for model '{}'", modelName);
                 } else {
-                    // 使用默认动画参数
+                    // 使用默认动画参数（初始状态保持静止）
                     renderObject.animationParams.position = glm::vec3(0.0f);
                     renderObject.animationParams.rotation = glm::vec3(0.0f);
                     renderObject.animationParams.scale = glm::vec3(1.0f);
                     renderObject.animationParams.rotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
                     renderObject.animationParams.rotationSpeed = 1.0f;
-                    renderObject.animationParams.enableAnimation = true;
+                    renderObject.animationParams.enableAnimation = false; // 默认禁用动画，保持静止
                     
                     // 检查是否为平台模型（保持静止）
                     renderObject.animationParams.isPlatform = (modelName.find("platform") != std::string::npos);
