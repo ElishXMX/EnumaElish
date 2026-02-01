@@ -32,6 +32,9 @@ target_compile_options(${TARGET_NAME} PUBLIC
     "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/permissive->"  # 严格标准模式
     "$<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/WX->")          # 警告视为错误
 
+# 源文件编码：统一为UTF-8，避免宽字符/表情符号等在MSVC下解析错误
+target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
+
 # 依赖库链接配置
 target_link_libraries(${TARGET_NAME} PUBLIC spdlog::spdlog)  # 日志库
 target_link_libraries(${TARGET_NAME} PRIVATE tinyobjloader stb) # 模型加载库

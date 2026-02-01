@@ -1,6 +1,7 @@
 #include "vulkan_util.h"
 #include "vulkan_rhi.h"
 #include "../../../core/base/macro.h"
+#include "../rhi_struct.h"
 
 #include <algorithm>
 #include <cmath>
@@ -96,6 +97,17 @@ namespace Elish
             LOG_ERROR("memTypeFound is nullptr");
             return;
         }
+        
+        // 如果缓冲区使用设备地址，需要添加相应的内存分配标志
+        VkMemoryAllocateFlagsInfo vk_allocate_flags_info {};
+        if (usageFlags & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+            vk_allocate_flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+            vk_allocate_flags_info.pNext = nullptr;
+            vk_allocate_flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+            
+            memAlloc.pNext = &vk_allocate_flags_info;
+        }
+        
         if (VK_SUCCESS != vkAllocateMemory(device, &memAlloc, nullptr, memory))
         {
             LOG_ERROR("alloc memory failed!");
@@ -150,6 +162,16 @@ namespace Elish
         buffer_memory_allocate_info.allocationSize = buffer_memory_requirements.size;
         buffer_memory_allocate_info.memoryTypeIndex =
             VulkanUtil::findMemoryType(physical_device, buffer_memory_requirements.memoryTypeBits, properties);
+
+        // 如果缓冲区使用设备地址，需要添加相应的内存分配标志
+        VkMemoryAllocateFlagsInfo vk_allocate_flags_info {};
+        if (usage & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+            vk_allocate_flags_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+            vk_allocate_flags_info.pNext = nullptr;
+            vk_allocate_flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT;
+            
+            buffer_memory_allocate_info.pNext = &vk_allocate_flags_info;
+        }
 
         if (vkAllocateMemory(device, &buffer_memory_allocate_info, nullptr, &buffer_memory) != VK_SUCCESS)
         {
@@ -364,12 +386,16 @@ namespace Elish
         VmaAllocationCreateInfo allocInfo = {};
         allocInfo.usage                   = VMA_MEMORY_USAGE_GPU_ONLY;
 
-        vmaCreateImage(static_cast<VulkanRHI*>(rhi)->m_assets_allocator,
-                       &image_create_info,
-                       &allocInfo,
-                       &image,
-                       &image_allocation,
-                       NULL);
+        VkResult result = vmaCreateImage(static_cast<VulkanRHI*>(rhi)->m_assets_allocator,
+                                        &image_create_info,
+                                        &allocInfo,
+                                        &image,
+                                        &image_allocation,
+                                        NULL);
+        if (result != VK_SUCCESS) {
+            LOG_ERROR("[VulkanUtil::createCubeMap] Failed to create cubemap image with VMA, error: {}", result);
+            return;
+        }
 
         // layout transitions -- image layout is set from none to destination
         transitionImageLayout(rhi,
@@ -488,17 +514,33 @@ namespace Elish
 
         VkBuffer       inefficient_staging_buffer;
         VkDeviceMemory inefficient_staging_buffer_memory;
-        createBuffer(static_cast<VulkanRHI*>(rhi)->m_physical_device,
-                     static_cast<VulkanRHI*>(rhi)->m_device,
-                     cube_byte_size,
-                     VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                     inefficient_staging_buffer,
-                     inefficient_staging_buffer_memory);
+        try {
+            createBuffer(static_cast<VulkanRHI*>(rhi)->m_physical_device,
+                         static_cast<VulkanRHI*>(rhi)->m_device,
+                         cube_byte_size,
+                         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         inefficient_staging_buffer,
+                         inefficient_staging_buffer_memory);
+        } catch (const std::exception& e) {
+            LOG_ERROR("[VulkanUtil::createCubeMap] Failed to create staging buffer: {}", e.what());
+            // 清理已创建的图像
+            vmaDestroyImage(static_cast<VulkanRHI*>(rhi)->m_assets_allocator, image, image_allocation);
+            return;
+        }
 
         void* data = NULL;
-        vkMapMemory(
+        VkResult mapResult = vkMapMemory(
             static_cast<VulkanRHI*>(rhi)->m_device, inefficient_staging_buffer_memory, 0, cube_byte_size, 0, &data);
+        if (mapResult != VK_SUCCESS) {
+            LOG_ERROR("[VulkanUtil::createCubeMap] Failed to map staging buffer memory, error: {}", mapResult);
+            // 清理资源
+            vkDestroyBuffer(static_cast<VulkanRHI*>(rhi)->m_device, inefficient_staging_buffer, nullptr);
+            vkFreeMemory(static_cast<VulkanRHI*>(rhi)->m_device, inefficient_staging_buffer_memory, nullptr);
+            vmaDestroyImage(static_cast<VulkanRHI*>(rhi)->m_assets_allocator, image, image_allocation);
+            return;
+        }
+        
         for (int i = 0; i < 6; i++)
         {
             memcpy((void*)(static_cast<char*>(data) + texture_layer_byte_size * i),
@@ -536,6 +578,15 @@ namespace Elish
                                      VK_IMAGE_VIEW_TYPE_CUBE,
                                      6,
                                      miplevels);
+        
+        // 验证图像视图创建是否成功
+        if (image_view == VK_NULL_HANDLE) {
+            LOG_ERROR("[VulkanUtil::createCubeMap] Failed to create cubemap image view");
+            // 清理已创建的图像
+            vmaDestroyImage(static_cast<VulkanRHI*>(rhi)->m_assets_allocator, image, image_allocation);
+            image = VK_NULL_HANDLE;
+            return;
+        }
     }
 
     void VulkanUtil::generateTextureMipMaps(RHI*     rhi,
@@ -773,9 +824,12 @@ namespace Elish
         region.imageOffset                     = {0, 0, 0};
         region.imageExtent                     = {width, height, 1};
 
+        // 执行缓冲区到图像的复制操作
         vkCmdCopyBufferToImage(command_buffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        LOG_DEBUG("[VulkanUtil::copyBufferToImage] Copy command recorded for {}x{} image with {} layers", width, height, layer_count);
 
         static_cast<VulkanRHI*>(rhi)->endSingleTimeCommands(rhi_command_buffer);
+        LOG_DEBUG("[VulkanUtil::copyBufferToImage] Buffer to image copy completed successfully");
     }
 
     void VulkanUtil::genMipmappedImage(RHI* rhi, VkImage image, uint32_t width, uint32_t height, uint32_t mip_levels)

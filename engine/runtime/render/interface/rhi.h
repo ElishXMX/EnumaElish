@@ -76,6 +76,7 @@ namespace Elish
         virtual bool createAccelerationStructure(const RHIAccelerationStructureCreateInfo* pCreateInfo, RHIAccelerationStructure* &pAccelerationStructure) = 0;
         virtual bool buildAccelerationStructure(RHICommandBuffer* commandBuffer, const RHIAccelerationStructureBuildInfo* pBuildInfo) = 0;
         virtual void getAccelerationStructureDeviceAddress(const RHIAccelerationStructureDeviceAddressInfo* pInfo, RHIDeviceAddress* pAddress) = 0;
+        virtual void getAccelerationStructureBuildSizes(const RHIAccelerationStructureBuildGeometryInfoKHR* pBuildInfo, const uint32_t* pMaxPrimitiveCounts, RHIAccelerationStructureBuildSizesInfoKHR* pSizeInfo) = 0;
         
         // 光线追踪着色器绑定表相关接口
         virtual bool createShaderBindingTable(const RHIShaderBindingTableCreateInfo* pCreateInfo, RHIPipeline* pipeline, RHIBuffer* &pBuffer, VmaAllocation* pAllocation) = 0;
@@ -172,6 +173,8 @@ namespace Elish
         virtual void destroyDevice() = 0;
         virtual void destroyCommandPool(RHICommandPool* commandPool) = 0;
         virtual void destroyBuffer(RHIBuffer* &buffer) = 0;
+        virtual void destroyPipeline(RHIPipeline* pipeline) = 0;
+        virtual void destroyPipelineLayout(RHIPipelineLayout* pipelineLayout) = 0;
         virtual void freeCommandBuffers(RHICommandPool* commandPool, uint32_t commandBufferCount, RHICommandBuffer* pCommandBuffers) = 0;
 
         // memory

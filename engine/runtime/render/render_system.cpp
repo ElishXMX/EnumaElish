@@ -11,6 +11,7 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include <iomanip>
 #include <filesystem>
 #include <unordered_map>
 #include <stdexcept>
@@ -28,18 +29,24 @@ namespace Elish
     //创建Vulkan实例/加载全局资源/初始化相机和管线
     void RenderSystem::initialize(RenderSystemInitInfo init_info )
     {
+        LOG_INFO("[RENDER_SYSTEM] ===== RenderSystem initialization started =====");
+        
         //vulkan初始化
          // render context initialize
+        LOG_INFO("[RENDER_SYSTEM] Step 1: Initializing Vulkan RHI");
         RHIInitInfo rhi_init_info;
         rhi_init_info.window_system = init_info.window_system;
 
         m_rhi = std::make_shared<VulkanRHI>();
         m_rhi->initialize(rhi_init_info);
+        LOG_INFO("[RENDER_SYSTEM] Step 1 completed: Vulkan RHI initialized");
         //vulkan实例创建完成
         
         // initialize render resource
+        LOG_INFO("[RENDER_SYSTEM] Step 2: Initializing render resource");
         m_render_resource = std::make_shared<RenderResource>();
         m_render_resource->initialize(m_rhi);
+        LOG_INFO("[RENDER_SYSTEM] Step 2 completed: Render resource initialized");
 
         // load content resources from JSON configuration
         std::unordered_map<std::string, std::string> model_paths;
@@ -48,13 +55,19 @@ namespace Elish
         
         // 尝试从JSON文件加载资源配置
         const std::string json_config_path = "../engine/runtime/content/levels/levels1.json";
+        LOG_INFO("[JSON_LOADER] ===== Starting JSON configuration loading =====");
+        LOG_INFO("[JSON_LOADER] Attempting to load JSON configuration from: {}", json_config_path);
+        LOG_INFO("[JSON_LOADER] Current working directory check...");
         if (loadResourcesFromJson(json_config_path, model_paths, model_texture_map, model_animation_params)) {
-            // LOG_DEBUG("[JSON_LOADER] Successfully loaded resources from JSON configuration: {}", json_config_path);
+            LOG_INFO("[JSON_LOADER] Successfully loaded resources from JSON configuration: {}", json_config_path);
+            LOG_INFO("[JSON_LOADER] Loaded {} models from JSON", model_paths.size());
+            for (const auto& [name, path] : model_paths) {
+                LOG_INFO("[JSON_LOADER] Model: {} -> {}", name, path);
+            }
         } else {
             // 如果JSON加载失败，使用硬编码的备用配置
-            LOG_WARN("[JSON_LOADER] Failed to load JSON configuration, using fallback hardcoded resources.");
-            
-           
+            LOG_ERROR("[JSON_LOADER] Failed to load JSON configuration, using fallback hardcoded resources.");
+            LOG_ERROR("[JSON_LOADER] This will result in no models being loaded!");
         }
 
         loadContentResources(model_paths, model_texture_map, model_animation_params);
@@ -78,11 +91,18 @@ namespace Elish
         }
         
         // initialize render pipeline
+        LOG_DEBUG("[RenderSystem] Creating render pipeline");
         m_render_pipeline        = std::make_shared<RenderPipeline>();
+        LOG_DEBUG("[RenderSystem] Setting RHI for render pipeline");
         m_render_pipeline->m_rhi = m_rhi;
+        LOG_DEBUG("[RenderSystem] Initializing render pipeline");
         m_render_pipeline->initialize();
+        LOG_DEBUG("[RenderSystem] Render pipeline initialization completed");
 
-       
+        // 注意：光线追踪资源将在模型加载完成后创建
+        if (!m_rhi->isRayTracingSupported()) {
+            LOG_WARN("[RenderSystem] Ray tracing is not supported on this device");
+        }
         
     }
 
@@ -93,6 +113,32 @@ namespace Elish
         m_render_pipeline->preparePassData(m_render_resource);
 
         m_render_pipeline->forwardRender(m_rhi, m_render_resource);
+
+        // 简易性能基准记录（启用方式：设置环境变量 ELISH_BENCH=1）
+        static bool bench_enabled = [](){ const char* v = std::getenv("ELISH_BENCH"); return v && std::string(v) == "1"; }();
+        static uint64_t frame_count = 0;
+        static double acc_ms = 0.0;
+        static auto last_ts = std::chrono::high_resolution_clock::now();
+        auto now = std::chrono::high_resolution_clock::now();
+        double dt_ms = std::chrono::duration<double, std::milli>(now - last_ts).count();
+        last_ts = now;
+        acc_ms += dt_ms;
+        frame_count++;
+        if (bench_enabled && frame_count % 120 == 0)
+        {
+            double avg_ms = acc_ms / 120.0;
+            acc_ms = 0.0;
+            double scale = 0.0;
+            uint32_t spp = 0;
+            uint32_t depth = 0;
+            std::ofstream ofs("../bin/rt_benchmark.csv", std::ios::app);
+            if (ofs)
+            {
+                ofs << std::fixed << std::setprecision(3)
+                    << avg_ms << "," << (avg_ms > 0.0 ? (1000.0/avg_ms) : 0.0) << "," << scale << "," << spp << "," << depth << "\n";
+            }
+            LOG_INFO("[Benchmark] avg_ms={:.3f}, fps={:.1f}", avg_ms, (avg_ms>0.0? (1000.0/avg_ms) : 0.0));
+        }
     }
     void RenderSystem::loadContentResources(const std::unordered_map<std::string, std::string>& model_paths,
                                             const std::unordered_map<std::string, std::vector<std::string>>& model_texture_map,
@@ -179,9 +225,9 @@ namespace Elish
                 if (success) {
                     m_render_resource->addRenderObject(renderObject);
                     loadedModels++;
-                    // LOG_INFO("✓ Successfully loaded model '{}' with {} vertices{}", 
-                    //         modelName, renderObject.vertices.size(),
-                    //         renderObject.animationParams.isPlatform ? " (Platform - Static)" : "");
+                    LOG_INFO("✓ Successfully loaded model '{}' with {} vertices{}", 
+                            modelName, renderObject.vertices.size(),
+                            renderObject.animationParams.isPlatform ? " (Platform - Static)" : "");
                 } else {
                     LOG_ERROR("✗ Failed to create render object for model '{}'", modelName);
                     failedModels++;
@@ -192,23 +238,42 @@ namespace Elish
             }
         }
         
-        // LOG_INFO("Model loading summary: {} loaded, {} failed", loadedModels, failedModels);
-        // LOG_INFO("Total render objects in resource manager: {}", m_render_resource->getRenderObjectCount());
+        LOG_INFO("Model loading summary: {} loaded, {} failed", loadedModels, failedModels);
+        LOG_INFO("Total render objects in resource manager: {}", m_render_resource->getRenderObjectCount());
         
         if (loadedModels > 0) {
-            // LOG_INFO("✓ Model loading completed successfully!");
+            LOG_INFO("✓ Model loading completed successfully!");
+            
+            // 在模型加载完成后创建光线追踪资源
+            if (m_rhi->isRayTracingSupported()) {
+                LOG_INFO("[RenderSystem] Creating ray tracing pipeline resources after model loading");
+                if (!m_render_resource->createRayTracingPipelineResource()) {
+                    LOG_ERROR("[RenderSystem] Failed to create ray tracing pipeline resources");
+                } else {
+                    LOG_INFO("[RenderSystem] Ray tracing pipeline resources created successfully");
+                }
+                
+                LOG_INFO("[RenderSystem] Creating ray tracing acceleration structures");
+                if (!m_render_resource->createRayTracingResource()) {
+                    LOG_ERROR("[RenderSystem] Failed to create ray tracing resources");
+                } else {
+                    LOG_INFO("[RenderSystem] Ray tracing resources created successfully! 🚀");
+                }
+            }
         } else {
             LOG_ERROR("✗ No models were loaded successfully!");
         }
         
     }
     bool RenderSystem::readFileToString(const std::string& file_path, std::string& content) {
+        LOG_INFO("[JSON_LOADER] Attempting to read file: {}", file_path);
         try {
             std::ifstream file(file_path, std::ios::in | std::ios::binary);
             if (!file.is_open()) {
-                LOG_ERROR("Failed to open file: {}", file_path);
+                LOG_ERROR("[JSON_LOADER] Failed to open file: {}", file_path);
                 return false;
             }
+            LOG_INFO("[JSON_LOADER] File opened successfully: {}", file_path);
 
             // 获取文件大小
             file.seekg(0, std::ios::end);

@@ -522,6 +522,38 @@ namespace Elish
         void* hostAddress;
     };
     
+    // 光线追踪加速结构几何实例数据结构体
+    struct RHIAccelerationStructureGeometryInstancesDataKHR
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIBool32 arrayOfPointers;
+        RHIDeviceOrHostAddress data;
+    };
+    
+    // 光线追踪加速结构几何三角形数据结构体
+    struct RHIAccelerationStructureGeometryTrianglesDataKHR
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIDeviceOrHostAddress vertexData;
+        RHIDeviceSize vertexStride;
+        uint32_t maxVertex;
+        RHIFormat vertexFormat;
+        RHIDeviceOrHostAddress indexData;
+        RHIIndexType indexType;
+        RHIDeviceOrHostAddress transformData;
+    };
+    
+    // 光线追踪加速结构几何AABB数据结构体
+    struct RHIAccelerationStructureGeometryAabbsDataKHR
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIDeviceOrHostAddress data;
+        RHIDeviceSize stride;
+    };
+    
     // 光线追踪几何数据结构体
     struct RHIAccelerationStructureGeometry
     {
@@ -529,25 +561,12 @@ namespace Elish
         const void* pNext;
         RHIGeometryTypeKHR geometryType;
         RHIGeometryFlagBitsKHR flags;
+        uint32_t primitiveCount; ///< 图元数量（三角形数量、实例数量或AABB数量）
         union {
-            struct {
-                RHIDeviceOrHostAddress vertexData;
-                RHIDeviceSize vertexStride;
-                uint32_t maxVertex;
-                RHIFormat vertexFormat;
-                RHIDeviceOrHostAddress indexData;
-                RHIIndexType indexType;
-                RHIDeviceOrHostAddress transformData;
-            } triangles;
-            struct {
-                RHIDeviceOrHostAddress data;
-                RHIDeviceSize stride;
-            } aabbs;
-            struct {
-                RHIBool32 arrayOfPointers;
-                RHIDeviceOrHostAddress data;
-            } instances;
-        };
+            RHIAccelerationStructureGeometryTrianglesDataKHR* triangles;
+            RHIAccelerationStructureGeometryAabbsDataKHR* aabbs;
+            RHIAccelerationStructureGeometryInstancesDataKHR* instances;
+        } geometry;
     };
     
     struct RHIWriteDescriptorSetAccelerationStructureKHR
@@ -753,6 +772,15 @@ namespace Elish
         const void* pNext;
         RHIDeviceSize allocationSize;
         uint32_t memoryTypeIndex;
+    };
+
+    // 内存分配标志信息结构体，用于支持设备地址等扩展功能
+    struct RHIMemoryAllocateFlagsInfo
+    {
+        RHIStructureType sType;
+        const void* pNext;
+        RHIMemoryAllocateFlags flags;
+        uint32_t deviceMask;
     };
 
     struct RHIMemoryHeap

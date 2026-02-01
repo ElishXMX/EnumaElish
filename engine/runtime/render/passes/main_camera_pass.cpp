@@ -238,8 +238,46 @@ namespace Elish
         m_rhi->pushEvent(command_buffer, "MAIN RENDER SUBPASS", main_color);
         
         // 设置视口和裁剪矩形
-        m_rhi->cmdSetViewportPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, m_rhi->getSwapchainInfo().viewport);
-        m_rhi->cmdSetScissorPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, m_rhi->getSwapchainInfo().scissor);
+        // 尝试从 RenderPipeline 获取 EditorLayoutState
+        bool viewportSet = false;
+        if (g_runtime_global_context.m_render_system) {
+            auto pipeline = std::dynamic_pointer_cast<RenderPipeline>(g_runtime_global_context.m_render_system->getRenderPipeline());
+            if (pipeline) {
+                const auto& layoutState = pipeline->getEditorLayoutState();
+                
+                // 如果计算出的视口有效（宽度和高度大于0），则使用它
+                if (layoutState.sceneViewport.width > 1.0f && layoutState.sceneViewport.height > 1.0f) {
+                    RHIViewport viewport;
+                    viewport.x = layoutState.sceneViewport.x;
+                    viewport.y = layoutState.sceneViewport.y;
+                    viewport.width = layoutState.sceneViewport.width;
+                    viewport.height = layoutState.sceneViewport.height;
+                    viewport.minDepth = 0.0f;
+                    viewport.maxDepth = 1.0f;
+                    
+                    RHIRect2D scissor;
+                    scissor.offset.x = (int32_t)viewport.x;
+                    scissor.offset.y = (int32_t)viewport.y;
+                    scissor.extent.width = (uint32_t)viewport.width;
+                    scissor.extent.height = (uint32_t)viewport.height;
+                    
+                    m_rhi->cmdSetViewportPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, &viewport);
+                    m_rhi->cmdSetScissorPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, &scissor);
+                    viewportSet = true;
+                    
+                    // 更新相机宽高比
+                    if (m_camera) {
+                        m_camera->setAspect(viewport.width / viewport.height);
+                    }
+                }
+            }
+        }
+        
+        if (!viewportSet) {
+            // 回退到默认全屏视口
+            m_rhi->cmdSetViewportPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, m_rhi->getSwapchainInfo().viewport);
+            m_rhi->cmdSetScissorPFN(m_rhi->getCurrentCommandBuffer(), 0, 1, m_rhi->getSwapchainInfo().scissor);
+        }
         
         // 渲染背景
         drawBackground(command_buffer);
@@ -1021,24 +1059,30 @@ namespace Elish
                 for (size_t objIndex = 0; objIndex < m_loaded_render_objects.size(); ++objIndex) {
                     auto& renderObject = m_loaded_render_objects[objIndex];
                     
-                    // 分配当前对象的描述符集 (使用共享的模型描述符布局)
-                    RHIDescriptorSetAllocateInfo object_descriptor_set_alloc_info{};
-                    object_descriptor_set_alloc_info.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-                    object_descriptor_set_alloc_info.pNext = nullptr;
-                    object_descriptor_set_alloc_info.descriptorPool = m_rhi->getDescriptorPoor();
-                    object_descriptor_set_alloc_info.descriptorSetCount = 1;
-                    object_descriptor_set_alloc_info.pSetLayouts = &m_render_pipelines[2].descriptorSetLayout;
-
                     // 确保渲染对象有描述符集数组
                     if (renderObject.descriptorSets.size() != maxFramesInFlight) {
                         renderObject.descriptorSets.resize(maxFramesInFlight);
                     }
+                    
+                    // 检查是否已经分配过描述符集，避免重复分配
+                    if (renderObject.descriptorSets[frameIndex] == VK_NULL_HANDLE) {
+                        // 分配当前对象的描述符集 (使用共享的模型描述符布局)
+                        RHIDescriptorSetAllocateInfo object_descriptor_set_alloc_info{};
+                        object_descriptor_set_alloc_info.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+                        object_descriptor_set_alloc_info.pNext = nullptr;
+                        object_descriptor_set_alloc_info.descriptorPool = m_rhi->getDescriptorPoor();
+                        object_descriptor_set_alloc_info.descriptorSetCount = 1;
+                        object_descriptor_set_alloc_info.pSetLayouts = &m_render_pipelines[2].descriptorSetLayout;
 
-                    if (RHI_SUCCESS != m_rhi->allocateDescriptorSets(&object_descriptor_set_alloc_info, 
-                                                                     renderObject.descriptorSets[frameIndex])) {
-                        LOG_ERROR("[setupModelDescriptorSet] Failed to allocate descriptor set for object {} frame {}", 
-                                 objIndex, frameIndex);
-                        continue;
+                        if (RHI_SUCCESS != m_rhi->allocateDescriptorSets(&object_descriptor_set_alloc_info, 
+                                                                         renderObject.descriptorSets[frameIndex])) {
+                            LOG_ERROR("[setupModelDescriptorSet] Failed to allocate descriptor set for object {} frame {}", 
+                                     objIndex, frameIndex);
+                            continue;
+                        }
+                        LOG_INFO("[setupModelDescriptorSet] Successfully allocated descriptor set for object {} frame {}", objIndex, frameIndex);
+                    } else {
+                        LOG_DEBUG("[setupModelDescriptorSet] Descriptor set already allocated for object {} frame {}, skipping allocation", objIndex, frameIndex);
                     }
                     
                     // 为当前对象创建描述符写入信息
@@ -1077,13 +1121,11 @@ namespace Elish
                     auto cubemapImageView = m_render_resource->getCubemapImageView();
                     auto cubemapSampler = m_render_resource->getCubemapImageSampler();
                     
-                    if (!cubemapImageView) {
-                        LOG_ERROR("[setupModelDescriptorSet] Cubemap image view is null for object {} frame {}", objIndex, frameIndex);
-                        continue;
-                    }
-                    
-                    if (!cubemapSampler) {
-                        LOG_ERROR("[setupModelDescriptorSet] Cubemap sampler is null for object {} frame {}", objIndex, frameIndex);
+                    if (!cubemapImageView || !cubemapSampler) {
+                        LOG_ERROR("[setupModelDescriptorSet] Cubemap resources are null (imageView: {}, sampler: {}) for object {} frame {}, skipping model rendering", 
+                                 (void*)cubemapImageView, (void*)cubemapSampler, objIndex, frameIndex);
+                        // 将描述符集标记为无效，避免在drawModels中使用
+                        renderObject.descriptorSets[frameIndex] = VK_NULL_HANDLE;
                         continue;
                     }
                     
@@ -1108,13 +1150,11 @@ namespace Elish
                     auto shadowMapImageView = m_render_resource->getDirectionalLightShadowImageView();
                     auto shadowMapSampler = m_render_resource->getDirectionalLightShadowImageSampler();
                     
-                    if (!shadowMapImageView) {
-                        LOG_ERROR("[setupModelDescriptorSet] Shadow map image view is null for object {} frame {}", objIndex, frameIndex);
-                        continue;
-                    }
-                    
-                    if (!shadowMapSampler) {
-                        LOG_ERROR("[setupModelDescriptorSet] Shadow map sampler is null for object {} frame {}", objIndex, frameIndex);
+                    if (!shadowMapImageView || !shadowMapSampler) {
+                        LOG_ERROR("[setupModelDescriptorSet] Shadow map resources are null (imageView: {}, sampler: {}) for object {} frame {}, skipping model rendering", 
+                                 (void*)shadowMapImageView, (void*)shadowMapSampler, objIndex, frameIndex);
+                        // 将描述符集标记为无效，避免在drawModels中使用
+                        renderObject.descriptorSets[frameIndex] = VK_NULL_HANDLE;
                         continue;
                     }
                     
@@ -1293,11 +1333,18 @@ namespace Elish
                 continue;
             }
             
+            // 检查描述符集是否有效
+            uint32_t currentFrameIndex = m_rhi->getCurrentFrameIndex();
+            if (renderObject.descriptorSets[currentFrameIndex] == VK_NULL_HANDLE) {
+                LOG_WARN("[MainCameraPass::drawModels] Model {} has invalid descriptor set for frame {}, skipping", i, currentFrameIndex);
+                continue;
+            }
+            
             // 绑定模型渲染的描述符集
             // LOG_DEBUG("[MainCameraPass::drawModels] About to bind descriptor sets for model {}", i);
             m_rhi->cmdBindDescriptorSetsPFN(command_buffer, RHI_PIPELINE_BIND_POINT_GRAPHICS, 
                                           m_render_pipelines[2].pipelineLayout, 0, 1, 
-                                          &renderObject.descriptorSets[m_rhi->getCurrentFrameIndex()], 0, nullptr);
+                                          &renderObject.descriptorSets[currentFrameIndex], 0, nullptr);
             // LOG_DEBUG("[MainCameraPass::drawModels] Descriptor sets bound for model {}", i);
             
             // Draw the model
@@ -1602,8 +1649,21 @@ namespace Elish
     };		// 创建UnifromBuffer统一缓存区，为每个飞行中的帧分配独立缓冲区
     
     void MainCameraPass::updateUniformBuffer(uint32_t currentFrameIndex) {
+        // 添加基本的空指针检查
+        if (!m_rhi) {
+            LOG_ERROR("[MainCameraPass::updateUniformBuffer] RHI is null");
+            return;
+        }
+        
         // 确保帧索引有效
         if (currentFrameIndex >= uniformBuffers.size()) {
+            LOG_WARN("[MainCameraPass::updateUniformBuffer] Invalid frame index: {} >= {}", currentFrameIndex, uniformBuffers.size());
+            return;
+        }
+        
+        // 检查uniform buffer是否有效
+        if (currentFrameIndex >= uniformBuffersMemory.size() || !uniformBuffersMemory[currentFrameIndex]) {
+            LOG_ERROR("[MainCameraPass::updateUniformBuffer] Uniform buffer memory is null for frame {}", currentFrameIndex);
             return;
         }
         
@@ -1632,8 +1692,11 @@ namespace Elish
         // ubo.proj[1][1] *= -1; // 已在RenderCamera中处理
 
          // 将数据复制到当前帧的uniform buffer
-        void* data;
-        m_rhi->mapMemory(uniformBuffersMemory[currentFrameIndex], 0, sizeof(ubo), 0, &data);
+        void* data = nullptr;
+        if (m_rhi->mapMemory(uniformBuffersMemory[currentFrameIndex], 0, sizeof(ubo), 0, &data) != RHI_SUCCESS || !data) {
+            LOG_ERROR("[MainCameraPass::updateUniformBuffer] Failed to map uniform buffer memory for frame {}", currentFrameIndex);
+            return;
+        }
         memcpy(data, &ubo, sizeof(ubo));
         m_rhi->unmapMemory(uniformBuffersMemory[currentFrameIndex]);
 
@@ -1655,8 +1718,8 @@ namespace Elish
             light_direction = glm::vec3(gpu_data.direction);
             light_color = glm::vec3(gpu_data.color);
             light_intensity = gpu_data.color.w; // 强度存储在颜色的w分量中
-            LOG_DEBUG("[MainCamera] Using light from RenderResource: Position ({:.2f}, {:.2f}, {:.2f}), Intensity {:.2f}", 
-                     light_position.x, light_position.y, light_position.z, light_intensity);
+            // LOG_DEBUG("[MainCamera] Using light from RenderResource: Position ({:.2f}, {:.2f}, {:.2f}), Intensity {:.2f}", 
+            //          light_position.x, light_position.y, light_position.z, light_intensity);
         }
         else
         {
@@ -1684,22 +1747,52 @@ namespace Elish
             ubv.camera_position = glm::vec4(2.0, 2.0, 2.0, 45.0);
         }
 
-        void* data_view;
-         m_rhi->mapMemory(viewUniformBuffersMemory[currentFrameIndex], 0, sizeof(ubv), 0, &data_view);
+        // 检查view uniform buffer是否有效
+        if (currentFrameIndex >= viewUniformBuffersMemory.size() || !viewUniformBuffersMemory[currentFrameIndex]) {
+            LOG_ERROR("[MainCameraPass::updateUniformBuffer] View uniform buffer memory is null for frame {}", currentFrameIndex);
+            return;
+        }
+        
+        void* data_view = nullptr;
+        if (m_rhi->mapMemory(viewUniformBuffersMemory[currentFrameIndex], 0, sizeof(ubv), 0, &data_view) != RHI_SUCCESS || !data_view) {
+            LOG_ERROR("[MainCameraPass::updateUniformBuffer] Failed to map view uniform buffer memory for frame {}", currentFrameIndex);
+            return;
+        }
         memcpy(data_view, &ubv, sizeof(ubv));
         m_rhi->unmapMemory(viewUniformBuffersMemory[currentFrameIndex]);
         
         // 更新光源投影视图矩阵uniform buffer
-        if (m_directional_light_shadow_pass) {
+        if (m_directional_light_shadow_pass && m_render_resource) {
             // 🔧 阴影通道现在直接从 RenderResource 获取光源数据
             // 重新计算光源矩阵以反映新的光源位置
-            m_directional_light_shadow_pass->updateLightMatrix(m_render_resource);
-            
-            glm::mat4 lightSpaceMatrix = m_directional_light_shadow_pass->getLightProjectionViewMatrix();
-            void* lightSpaceData;
-            m_rhi->mapMemory(lightSpaceMatrixBuffersMemory[currentFrameIndex], 0, sizeof(lightSpaceMatrix), 0, &lightSpaceData);
-            memcpy(lightSpaceData, &lightSpaceMatrix, sizeof(lightSpaceMatrix));
-            m_rhi->unmapMemory(lightSpaceMatrixBuffersMemory[currentFrameIndex]);
+            try {
+                m_directional_light_shadow_pass->updateLightMatrix(m_render_resource);
+                
+                glm::mat4 lightSpaceMatrix = m_directional_light_shadow_pass->getLightProjectionViewMatrix();
+                
+                // 检查light space matrix buffer是否有效
+                if (currentFrameIndex >= lightSpaceMatrixBuffersMemory.size() || !lightSpaceMatrixBuffersMemory[currentFrameIndex]) {
+                    LOG_ERROR("[MainCameraPass::updateUniformBuffer] Light space matrix buffer memory is null for frame {}", currentFrameIndex);
+                    return;
+                }
+                
+                void* lightSpaceData = nullptr;
+                if (m_rhi->mapMemory(lightSpaceMatrixBuffersMemory[currentFrameIndex], 0, sizeof(lightSpaceMatrix), 0, &lightSpaceData) != RHI_SUCCESS || !lightSpaceData) {
+                    LOG_ERROR("[MainCameraPass::updateUniformBuffer] Failed to map light space matrix buffer memory for frame {}", currentFrameIndex);
+                    return;
+                }
+                memcpy(lightSpaceData, &lightSpaceMatrix, sizeof(lightSpaceMatrix));
+                m_rhi->unmapMemory(lightSpaceMatrixBuffersMemory[currentFrameIndex]);
+            } catch (const std::exception& e) {
+                LOG_ERROR("[MainCameraPass::updateUniformBuffer] Exception in shadow pass update: {}", e.what());
+            }
+        } else {
+            if (!m_directional_light_shadow_pass) {
+                LOG_WARN("[MainCameraPass::updateUniformBuffer] Directional light shadow pass is null");
+            }
+            if (!m_render_resource) {
+                LOG_WARN("[MainCameraPass::updateUniformBuffer] Render resource is null");
+            }
         }
        
     }
@@ -1758,6 +1851,11 @@ namespace Elish
      * @brief 绘制UI内容（在UI子通道中执行）
      * @param command_buffer 命令缓冲区
      */
+    /**
+     * @brief 在UI子通道中绘制UI内容
+     * @details 此函数在主相机渲染通道的UI子通道中被调用，确保UI在正确的渲染通道内渲染
+     * @param command_buffer 当前的命令缓冲区
+     */
     void MainCameraPass::drawUI(RHICommandBuffer* command_buffer)
     {
         // 获取UI Pass并执行绘制
@@ -1775,10 +1873,27 @@ namespace Elish
                     if (ui_pass)
                     {
                         // 在UI子通道中绘制UI内容
-                        ui_pass->drawInSubpass(command_buffer);
+                        // 注意：此时已经在活跃的渲染通道内，ImGui可以正常渲染
+                        ui_pass->draw(command_buffer);
+                    }
+                    else
+                    {
+                        LOG_WARN("[MainCameraPass] UI Pass is null, skipping UI rendering");
                     }
                 }
+                else
+                {
+                    LOG_WARN("[MainCameraPass] Failed to cast render pipeline, skipping UI rendering");
+                }
             }
+            else
+            {
+                LOG_WARN("[MainCameraPass] Render pipeline is null, skipping UI rendering");
+            }
+        }
+        else
+        {
+            LOG_WARN("[MainCameraPass] Render system is null, skipping UI rendering");
         }
 
         // 更新相机的宽高比以适应新的窗口尺寸
@@ -1789,8 +1904,6 @@ namespace Elish
             float aspectRatio = windowWidth / windowHeight;
             m_camera->setAspect(aspectRatio);
         }
-        
-
     }
     
     // 旧的光源系统方法已移除，现在使用 RenderResource 管理光源

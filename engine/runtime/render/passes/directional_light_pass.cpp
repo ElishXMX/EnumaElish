@@ -915,9 +915,9 @@ namespace Elish
         float light_distance = primary_light->distance; // 使用光源数据中的距离参数
         glm::vec3 light_world_position = scene_center - light_direction * light_distance;
         
-        LOG_DEBUG("[Shadow] Using light data: Position ({:.2f}, {:.2f}, {:.2f}), Direction ({:.2f}, {:.2f}, {:.2f})", 
-                 light_world_position.x, light_world_position.y, light_world_position.z,
-                 light_direction.x, light_direction.y, light_direction.z);
+        // LOG_DEBUG("[Shadow] Using light data: Position ({:.2f}, {:.2f}, {:.2f}), Direction ({:.2f}, {:.2f}, {:.2f})", 
+        //          light_world_position.x, light_world_position.y, light_world_position.z,
+        //          light_direction.x, light_direction.y, light_direction.z);
         
         // ===== 1. 基础向量和距离计算 =====
         // 从光源指向场景中心的向量（用于阴影投射）

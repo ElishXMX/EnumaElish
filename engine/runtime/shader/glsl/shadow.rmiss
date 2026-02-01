@@ -1,5 +1,5 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
 
 /**
  * @file shadow.rmiss
@@ -9,7 +9,7 @@
  */
 
 // 阴影光线负载
-layout(location = 1) rayPayloadInNV bool isShadowed;
+layout(location = 1) rayPayloadInEXT bool isShadowed;
 
 void main()
 {

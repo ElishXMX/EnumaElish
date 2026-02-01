@@ -226,6 +226,18 @@ namespace Elish {
         RHIImageView* rayTracingOutputImageView;     // 光线追踪输出图像视图
         VmaAllocation rayTracingOutputImageAllocation; // 输出图像内存分配
         
+        // 合并缓冲区（用于光线追踪着色器）
+        RHIBuffer* mergedVertexBuffer;               // 合并的顶点缓冲区
+        VmaAllocation mergedVertexAllocation;        // 合并顶点缓冲区内存分配
+        RHIBuffer* mergedIndexBuffer;                // 合并的索引缓冲区
+        VmaAllocation mergedIndexAllocation;         // 合并索引缓冲区内存分配
+        
+        // 暂存缓冲区重用机制（性能优化）
+        RHIBuffer* scratchBuffer;                    // 可重用的暂存缓冲区
+        VmaAllocation scratchBufferAllocation;       // 暂存缓冲区内存分配
+        size_t scratchBufferSize;                    // 当前暂存缓冲区大小
+        bool scratchBufferInUse;                     // 暂存缓冲区是否正在使用
+        
         // 兼容性成员变量（用于raytracing_pass.cpp）
         RHIAccelerationStructure* tlas;              // TLAS别名，指向topLevelAS
         RHIBuffer* vertex_buffer;                     // 顶点缓冲区
@@ -575,6 +587,10 @@ namespace Elish {
         bool m_rayTracingPipelineResourceCreated = false;          ///< 光线追踪管线资源是否已创建
         bool m_rayTracingResourceCreated = false;                   ///< 光线追踪资源是否已创建
         
+        // 光线追踪几何数据结构存储（避免悬空指针）
+        std::vector<RHIAccelerationStructureGeometryTrianglesDataKHR> m_rayTracingTrianglesData;  ///< 三角形几何数据数组
+        RHIAccelerationStructureGeometryInstancesDataKHR m_rayTracingInstancesData;              ///< 实例几何数据
+        
         /**
          * @brief 加载OBJ模型文件
          * @param objPath OBJ文件路径
@@ -606,9 +622,15 @@ namespace Elish {
          * @brief 创建单个默认纹理
          * @param renderObject 渲染对象
          * @param index 纹理索引
-         * @return 是否创建成功
+         * @return 创建是否成功
          */
         bool createSingleDefaultTexture(RenderObject& renderObject, size_t index);
+
+        /**
+         * @brief 创建合并的顶点和索引缓冲区（用于光线追踪）
+         * @return 创建是否成功
+         */
+        bool createMergedVertexIndexBuffers();
 
         
     };

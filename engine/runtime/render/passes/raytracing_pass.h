@@ -4,6 +4,10 @@
 #include "../render_resource.h"
 #include <glm/glm.hpp>
 #include <memory>
+#include <chrono>
+#include <mutex>
+#include <string>
+#include <algorithm>
 
 namespace Elish
 {
@@ -90,6 +94,62 @@ namespace Elish
          */
         void updateAfterFramebufferRecreate();
 
+        /**
+         * @brief 动态调整光线追踪参数
+         * @param frame_number 当前帧号
+         * @param adaptive_samples 自适应采样数
+         * @param noise_threshold 噪声阈值
+         * @param quality_factor 质量因子
+         */
+        void adjustRayTracingParameters(uint32_t frame_number, uint32_t adaptive_samples, float noise_threshold, float quality_factor);
+        
+        /**
+         * @brief 设置渲染缩放比例
+         * @param scale 渲染缩放比例（0.5-1.0）
+         */
+        void setRenderScale(float scale) { m_render_scale = std::clamp(scale, 0.5f, 1.0f); }
+        
+        float getRenderScale() const { return m_render_scale; }
+        uint32_t getMaxRayDepth() const { return m_max_ray_depth; }
+        uint32_t getSamplesPerPixel() const { return m_samples_per_pixel; }
+        
+        /**
+         * @brief 光线追踪诊断信息结构体
+         */
+        struct RayTracingDiagnostics {
+            uint64_t total_rays_traced = 0;          // 总光线数
+            uint64_t rays_per_second = 0;            // 每秒光线数
+            float average_frame_time = 0.0f;         // 平均帧时间
+            float last_frame_time = 0.0f;           // 上一帧时间
+            uint32_t failed_ray_count = 0;          // 失败光线数
+            uint32_t total_frame_count = 0;         // 总帧数
+            bool performance_warning = false;        // 性能警告标志
+            std::chrono::high_resolution_clock::time_point last_update_time;
+        };
+        
+        /**
+         * @brief 获取光线追踪诊断信息
+         * @return 诊断信息结构体的副本
+         */
+        RayTracingDiagnostics getDiagnostics() const;
+        
+        /**
+         * @brief 重置诊断统计信息
+         */
+        void resetDiagnostics();
+        
+        /**
+         * @brief 启用或禁用性能监控
+         * @param enable 是否启用监控
+         */
+        void setPerformanceMonitoring(bool enable);
+        
+        /**
+         * @brief 获取当前性能状态
+         * @return 性能状态字符串
+         */
+        std::string getPerformanceStatus() const;
+
     private:
         /**
          * @brief 设置光线追踪描述符集布局
@@ -117,13 +177,26 @@ namespace Elish
         void updateDescriptorSet();
 
         /**
-         * @brief 计算着色器绑定表
+         * @brief 创建着色器绑定表
          */
         void createShaderBindingTable();
 
+        /**
+         * @brief 执行初始化清理操作
+         * @param failed_step 失败的初始化步骤
+         * @details 根据失败的步骤执行相应的资源清理，确保不会出现资源泄漏
+         */
+        void performInitializationCleanup(uint32_t failed_step);
+        
+        /**
+         * @brief 根据硬件能力调整光线追踪参数
+         * @details 自动检测硬件性能并调整光线追踪质量设置
+         */
+        void adjustRayTracingParameters();
+
     private:
         // 光线追踪状态
-        bool m_ray_tracing_enabled = false;
+        bool m_ray_tracing_enabled = false;  // 默认关闭光线追踪功能，避免影响UI与主渲染
         bool m_is_initialized = false;
 
         // 光线追踪参数
@@ -150,7 +223,10 @@ namespace Elish
         // 渲染资源引用
         std::shared_ptr<RenderResource> m_render_resource;
 
-        // 光线追踪uniform数据结构
+        /**
+         * @brief 光线追踪uniform数据结构
+         * @details 包含光线追踪着色器所需的所有uniform数据
+         */
         struct RayTracingUniformData {
             glm::mat4 view_inverse;
             glm::mat4 proj_inverse;
@@ -161,11 +237,54 @@ namespace Elish
             float time;
             float _padding;
         };
+        
+        /**
+         * @brief 光线追踪推送常量结构
+         * @details 用于动态调整光线追踪参数的推送常量
+         */
+        struct RayTracingPushConstants {
+            uint32_t frame_number;          // 当前帧号，用于随机数生成
+            uint32_t adaptive_samples;      // 自适应采样数
+            float noise_threshold;          // 噪声阈值
+            float quality_factor;           // 质量因子 (0.0-1.0)
+        };
 
         // Uniform缓冲区
         std::vector<RHIBuffer*> m_uniform_buffers;
         std::vector<RHIDeviceMemory*> m_uniform_buffers_memory;
         std::vector<void*> m_uniform_buffers_mapped;
+        
+        // 调试和诊断相关成员变量
+        
+        mutable RayTracingDiagnostics m_diagnostics;
+        mutable std::mutex m_diagnostics_mutex;      // 诊断数据互斥锁
+        bool m_performance_monitoring_enabled = true; // 性能监控开关
+        
+        // 输出图像分辨率与缩放
+        uint32_t m_output_width = 0;
+        uint32_t m_output_height = 0;
+        float m_render_scale = 1.0f;
+
+        // 跟踪上一帧是否执行了光线追踪
+        bool m_traced_last_frame = false;
+
+    public:
+        /**
+         * @brief 查询上一帧是否执行了光线追踪
+         */
+        bool didLastFrameTrace() const { return m_traced_last_frame; }
+        
+        // 私有诊断方法
+        /**
+         * @brief 更新性能统计信息
+         * @param frame_time 当前帧时间
+         */
+        void updatePerformanceStats(float frame_time) const;
+        
+        /**
+         * @brief 检查性能警告条件
+         */
+        void checkPerformanceWarnings() const;
     };
 
 } // namespace Elish

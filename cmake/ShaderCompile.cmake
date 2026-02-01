@@ -19,11 +19,11 @@ function(compile_shader SHADERS TARGET_NAME SHADER_INCLUDE_FOLDER GENERATED_DIR 
         set(CPP_FILE "${CMAKE_CURRENT_SOURCE_DIR}/${GENERATED_DIR}/cpp/${HEADER_NAME}.h")
 
         # 检查是否为光线追踪着色器，需要更高的SPIR-V版本
-        if(SHADER_NAME MATCHES "\.(rgen|rchit|rmiss|rcall)$")
-            # 光线追踪着色器使用 NV 扩展，需要 SPIR-V 1.4
+        if(SHADER_NAME MATCHES "\.\(rgen|rchit|rmiss|rcall\)$")
+            # 光线追踪着色器使用 KHR 扩展，需要 Vulkan 1.2 支持
             add_custom_command(
                 OUTPUT ${SPV_FILE}
-                COMMAND ${GLSLANG_BIN} -I${SHADER_INCLUDE_FOLDER} -V --target-env vulkan1.1 -o ${SPV_FILE} ${SHADER}
+                COMMAND ${GLSLANG_BIN} -I${SHADER_INCLUDE_FOLDER} -V --target-env vulkan1.2 -o ${SPV_FILE} ${SHADER}
                 DEPENDS ${SHADER}
                 WORKING_DIRECTORY "${working_dir}")
         else()

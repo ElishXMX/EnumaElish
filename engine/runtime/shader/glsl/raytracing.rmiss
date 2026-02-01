@@ -1,5 +1,5 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
 
 /**
  * @file raytracing.rmiss
@@ -9,15 +9,15 @@
  */
 
 // 光线负载结构
-layout(location = 0) rayPayloadInNV vec3 hitValue;
+layout(location = 0) rayPayloadInEXT vec3 hitValue;
 
-// 环境贴图（可选）
-layout(binding = 3, set = 0) uniform samplerCube environmentMap;
+// 环境贴图（可选）- 暂时注释掉以避免验证层错误
+// layout(binding = 3, set = 0) uniform samplerCube environmentMap;
 
 void main()
 {
     // 获取光线方向
-    vec3 rayDirection = gl_WorldRayDirectionNV;
+    vec3 rayDirection = gl_WorldRayDirectionEXT;
     
     // 方案1：使用环境贴图
     // hitValue = texture(environmentMap, rayDirection).rgb;

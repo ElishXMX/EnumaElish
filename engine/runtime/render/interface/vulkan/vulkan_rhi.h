@@ -79,6 +79,7 @@ namespace Elish
         bool createAccelerationStructure(const RHIAccelerationStructureCreateInfo* pCreateInfo, RHIAccelerationStructure* &pAccelerationStructure) override;
         bool buildAccelerationStructure(RHICommandBuffer* commandBuffer, const RHIAccelerationStructureBuildInfo* pBuildInfo) override;
         void getAccelerationStructureDeviceAddress(const RHIAccelerationStructureDeviceAddressInfo* pInfo, RHIDeviceAddress* pAddress) override;
+        void getAccelerationStructureBuildSizes(const RHIAccelerationStructureBuildGeometryInfoKHR* pBuildInfo, const uint32_t* pMaxPrimitiveCounts, RHIAccelerationStructureBuildSizesInfoKHR* pSizeInfo) override;
         RHIDeviceAddress getBufferDeviceAddress(RHIBuffer* buffer) override;
         
         // 光线追踪着色器绑定表相关接口
@@ -133,6 +134,7 @@ namespace Elish
         bool beginCommandBuffer(RHICommandBuffer* commandBuffer, const RHICommandBufferBeginInfo* pBeginInfo) override;
         void cmdCopyImageToBuffer(RHICommandBuffer* commandBuffer, RHIImage* srcImage, RHIImageLayout srcImageLayout, RHIBuffer* dstBuffer, uint32_t regionCount, const RHIBufferImageCopy* pRegions) override;
         void cmdCopyImageToImage(RHICommandBuffer* commandBuffer, RHIImage* srcImage, RHIImageAspectFlagBits srcFlag, RHIImage* dstImage, RHIImageAspectFlagBits dstFlag, uint32_t width, uint32_t height) override;
+        void cmdCopyImageToImage(RHICommandBuffer* commandBuffer, RHIImage* srcImage, RHIImageLayout srcLayout, RHIImageAspectFlagBits srcFlag, RHIImage* dstImage, RHIImageLayout dstLayout, RHIImageAspectFlagBits dstFlag, uint32_t width, uint32_t height);
         void cmdCopyBuffer(RHICommandBuffer* commandBuffer, RHIBuffer* srcBuffer, RHIBuffer* dstBuffer, uint32_t regionCount, RHIBufferCopy* pRegions) override;
         void cmdDraw(RHICommandBuffer* commandBuffer, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
         void cmdDispatch(RHICommandBuffer* commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
@@ -187,6 +189,8 @@ namespace Elish
         void destroyDevice() override;
         void destroyCommandPool(RHICommandPool* commandPool) override;
         void destroyBuffer(RHIBuffer* &buffer) override;
+        void destroyPipeline(RHIPipeline* pipeline) override;
+        void destroyPipelineLayout(RHIPipelineLayout* pipelineLayout) override;
         void freeCommandBuffers(RHICommandPool* commandPool, uint32_t commandBufferCount, RHICommandBuffer* pCommandBuffers) override;
 
         // memory
@@ -338,14 +342,17 @@ namespace Elish
     public:
         bool isPointLightShadowEnabled() override;
         
+        // VMA分配器访问方法
+        VmaAllocator getAssetsAllocator() const { return m_assets_allocator; }
+        
         // 光线追踪相关查询接口
         bool isRayTracingSupported() override { return m_ray_tracing_supported; }
         const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& getRayTracingPipelineProperties() const { return m_rt_pipeline_properties; }
         const VkPhysicalDeviceAccelerationStructurePropertiesKHR& getAccelerationStructureProperties() const { return m_as_properties; }
 
     private:
-        bool m_enable_validation_Layers{ true };
-        bool m_enable_debug_utils_label{ true };
+        bool m_enable_validation_Layers{ true };   // 始终启用验证层以获取完整错误信息
+        bool m_enable_debug_utils_label{ true };   // 始终启用调试标签以便问题排查
         bool m_enable_point_light_shadow{ true };
 
         // used in descriptor pool creation
@@ -368,6 +375,9 @@ namespace Elish
         QueueFamilyIndices      findQueueFamilies(VkPhysicalDevice physical_device);
         bool                    checkDeviceExtensionSupport(VkPhysicalDevice physical_device);
         bool                    isDeviceSuitable(VkPhysicalDevice physical_device);
+        
+        // 光线追踪兼容性检测方法
+        bool                    checkRayTracingCompatibility();
         SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice physical_device);
 
         VkFormat findDepthFormat();

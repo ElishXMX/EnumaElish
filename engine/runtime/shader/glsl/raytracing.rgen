@@ -1,5 +1,5 @@
 #version 460
-#extension GL_NV_ray_tracing : require
+#extension GL_EXT_ray_tracing : require
 
 /**
  * @file raytracing.rgen
@@ -9,7 +9,7 @@
  */
 
 // 光线追踪加速结构
-layout(binding = 0, set = 0) uniform accelerationStructureNV topLevelAS;
+layout(binding = 0, set = 0) uniform accelerationStructureEXT topLevelAS;
 
 // 输出图像
 layout(binding = 1, set = 0, rgba8) uniform image2D image;
@@ -23,13 +23,13 @@ layout(binding = 2, set = 0) uniform CameraBuffer {
 } cam;
 
 // 光线负载结构
-layout(location = 0) rayPayloadNV vec3 hitValue;
+layout(location = 0) rayPayloadEXT vec3 hitValue;
 
 void main() 
 {
     // 获取当前像素坐标
-    const vec2 pixelCenter = vec2(gl_LaunchIDNV.xy) + vec2(0.5);
-    const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeNV.xy);
+    const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
+    const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
     vec2 d = inUV * 2.0 - 1.0;
 
     // 计算光线起点和方向
@@ -41,8 +41,8 @@ void main()
     hitValue = vec3(0.0);
 
     // 发射光线
-    traceNV(topLevelAS,           // 加速结构
-               gl_RayFlagsOpaqueNV,  // 光线标志
+    traceRayEXT(topLevelAS,           // 加速结构
+               gl_RayFlagsOpaqueEXT,  // 光线标志
                0xff,                 // 剔除掩码
                0,                    // sbtRecordOffset
                0,                    // sbtRecordStride
@@ -55,5 +55,5 @@ void main()
     );
 
     // 将结果写入输出图像
-    imageStore(image, ivec2(gl_LaunchIDNV.xy), vec4(hitValue, 1.0));
+    imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(hitValue, 1.0));
 }

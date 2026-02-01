@@ -5,7 +5,7 @@
 #include "../../core/log/log_system.h"
 #include "../../global/global_context.h"
 #include "../window_system.h"
-#include "../render_pipeline_base.h"
+#include "../render_pipeline.h"
 #include "../render_system.h"
 #include "main_camera_pass.h"
 
@@ -13,6 +13,7 @@
 #include <imgui.h>
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_vulkan.h>
+#include <algorithm>
 
 #include <stdexcept>
 #include <fstream>
@@ -70,11 +71,22 @@ namespace Elish
      * @brief 渲染UI内容
      * @param command_buffer 当前的命令缓冲区
      */
+    /**
+     * @brief UI渲染通道的主绘制函数
+     * @details 处理ImGui的帧开始、内容渲染和帧结束，确保在正确的渲染通道内执行
+     * @param command_buffer 当前的命令缓冲区
+     */
     void UIPass::draw(RHICommandBuffer* command_buffer)
     {
         if (!m_imgui_initialized)
         {
-            
+            LOG_WARN("[UIPass] ImGui not initialized, skipping UI rendering");
+            return;
+        }
+
+        // 验证命令缓冲区有效性
+        if (!command_buffer) {
+            LOG_ERROR("[UIPass] Invalid command buffer provided to UI draw");
             return;
         }
 
@@ -90,9 +102,11 @@ namespace Elish
         ImGui::Render();
         ImDrawData* draw_data = ImGui::GetDrawData();
         
-        if (draw_data && draw_data->CmdListsCount > 0)
+        // 只有在有实际绘制数据时才进行渲染
+        if (draw_data && draw_data->CmdListsCount > 0 && draw_data->TotalVtxCount > 0)
         {
             // 使用Vulkan命令缓冲区渲染ImGui
+            // 注意：ImGui_ImplVulkan_RenderDrawData 期望在活跃的渲染通道内被调用
             VkCommandBuffer vk_command_buffer = static_cast<VulkanCommandBuffer*>(command_buffer)->getResource();
             ImGui_ImplVulkan_RenderDrawData(draw_data, vk_command_buffer);
         }
@@ -280,22 +294,97 @@ namespace Elish
      */
     void UIPass::renderUIContent()
     {
+        // 检查渲染资源是否有效
+        if (!m_render_resource) {
+            LOG_WARN("[UIPass] Render resource is null, UI content may be limited");
+        }
+
+        // 获取 RenderPipeline 以访问 EditorLayoutState
+        auto render_system = g_runtime_global_context.m_render_system;
+        std::shared_ptr<RenderPipeline> render_pipeline;
+        if (render_system) {
+            render_pipeline = std::dynamic_pointer_cast<RenderPipeline>(render_system->getRenderPipeline());
+        }
+
+        if (!render_pipeline) {
+             LOG_ERROR("[UIPass] RenderPipeline not available");
+             return;
+        }
+
+        // 获取全局 EditorLayoutState
+        auto& layoutState = render_pipeline->getEditorLayoutState();
+        
         // 🎨 主窗口 - 左侧边栏布局，为3D渲染留出空间
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         
-        // 📏 左侧边栏配置（提前声明以供窗口尺寸计算使用）
-        static float sidebar_width = 480.0f;
-        static bool sidebar_collapsed = false;  // 边栏折叠状态
+        // 检查视口有效性
+        if (!viewport) {
+            LOG_ERROR("[UIPass] ImGui viewport is null, cannot render UI");
+            return;
+        }
         
-        // 根据边栏状态实时计算窗口宽度
-        float window_width = sidebar_collapsed ? 30.0f : sidebar_width + 8.0f; // +8为分隔线宽度
+        // 📏 左侧边栏配置（使用 EditorLayoutState）
+        float& sidebar_width = layoutState.sidebarWidth;
+        bool& sidebar_collapsed = layoutState.isSidebarCollapsed;
+        
+        // ⌨️ Keyboard Shortcuts
+        if (ImGui::GetIO().KeyCtrl) {
+            if (ImGui::IsKeyPressed(ImGuiKey_B)) {
+                sidebar_collapsed = !sidebar_collapsed;
+            }
+            if (!sidebar_collapsed) {
+                if (ImGui::IsKeyDown(ImGuiKey_LeftArrow)) {
+                    sidebar_width = std::max(200.0f, sidebar_width - 5.0f);
+                }
+                if (ImGui::IsKeyDown(ImGuiKey_RightArrow)) {
+                    sidebar_width = std::min(500.0f, sidebar_width + 5.0f);
+                }
+            }
+        }
+
+        // 🎬 Animation State
+        static float animated_content_width = sidebar_width;
+        float target_content_width = sidebar_collapsed ? 0.0f : sidebar_width;
+        
+        // Smooth transition
+        float animation_speed = 15.0f * ImGui::GetIO().DeltaTime;
+        if (std::abs(animated_content_width - target_content_width) > 0.5f) {
+            animated_content_width += (target_content_width - animated_content_width) * animation_speed;
+            layoutState.isViewportDirty = true; // Keep updating viewport during animation
+        } else {
+            animated_content_width = target_content_width;
+        }
+
+        // Calculate window width based on animated content width
+        // Base width (button area) is 30.0f
+        // Splitter (8.0f) is only needed if content is visible (width > 0)
+        float splitter_width = (animated_content_width > 1.0f) ? 8.0f : 0.0f;
+        // 增加额外的缓冲宽度 (2.0f)，防止因浮点精度或微小间距导致 Splitter 被裁剪
+        float window_width = 30.0f + animated_content_width + splitter_width + 2.0f;
         
         // 确保窗口宽度不超过视口宽度的80%
         float max_window_width = viewport->WorkSize.x * 0.8f;
         window_width = std::min(window_width, max_window_width);
+
+        // 底部面板配置
+        static float bottom_panel_height = 250.0f;
+        const float min_bottom_panel_height = 150.0f;
+        const float max_bottom_panel_height = std::max(min_bottom_panel_height, viewport->WorkSize.y * 0.6f);
+
+        // 更新 layoutState 中的视口信息 (这是关键步骤，将 UI 布局同步回渲染管线)
+        // 视口起始 X 坐标为侧边栏宽度
+        layoutState.sceneViewport.x = window_width;
+        layoutState.sceneViewport.y = 0.0f;
+        // 视口宽度为总宽度减去侧边栏宽度
+        layoutState.sceneViewport.width = viewport->WorkSize.x - window_width;
+        // 视口高度减去底部面板高度
+        layoutState.sceneViewport.height = viewport->WorkSize.y - bottom_panel_height;
+        
+        // 标记视口尺寸可能已改变
+        layoutState.isViewportDirty = true;
         
         ImGui::SetNextWindowPos(viewport->WorkPos);
-        ImGui::SetNextWindowSize(ImVec2(window_width, viewport->WorkSize.y));
+        ImGui::SetNextWindowSize(ImVec2(window_width, viewport->WorkSize.y)); // Sidebar takes full height visually, but splitter will limit interaction
         ImGui::SetNextWindowViewport(viewport->ID);
         
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
@@ -311,8 +400,7 @@ namespace Elish
         
         // 📏 左侧边栏配置（使用前面声明的变量）
         const float min_sidebar_width = 200.0f;
-        const float max_sidebar_width = viewport->WorkSize.x; // 设置为当前窗口宽度
-        static float font_scale = 1.0f;         // 字体缩放比例
+        const float max_sidebar_width = 500.0f; // 限制最大宽度为 500px
         
         // 🔄 边栏折叠/展开按钮
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
@@ -334,216 +422,140 @@ namespace Elish
         ImGui::PopStyleColor(3);
         
         // 🎯 左侧边栏区域（仅在未折叠时显示）
-        if (!sidebar_collapsed)
+        if (animated_content_width > 1.0f)
         {
-            ImGui::SameLine();
-            ImGui::BeginChild("Sidebar", ImVec2(sidebar_width, 0), true, ImGuiWindowFlags_NoScrollbar);
+            // 紧凑排列，消除间距，确保 Splitter 不会被挤出窗口
+            ImGui::SameLine(0.0f, 0.0f);
+            // 使用动画宽度作为子窗口宽度，确保平滑过渡且不超出主窗口
+            ImGui::BeginChild("Sidebar", ImVec2(animated_content_width, 0), true, ImGuiWindowFlags_NoScrollbar);
         
-            // 🎨 Font Size Control
-        static bool show_font_settings = true;
-        if (ImGui::CollapsingHeader("🎨 Font Settings", &show_font_settings, ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::Indent(10.0f);
-            ImGui::Text("Font Size Adjustment:");
-            
-            // Font scaling slider with 5x maximum
-            if (ImGui::SliderFloat("##FontScale", &font_scale, 0.5f, 5.0f, "%.2fx"))
-            {
-                // Apply font scaling
-                ImGuiIO& io = ImGui::GetIO();
-                io.FontGlobalScale = font_scale;
-            }
-            
-            ImGui::SameLine();
-            if (ImGui::Button("Reset", ImVec2(50, 0)))
-            {
-                font_scale = 1.0f;
-                ImGui::GetIO().FontGlobalScale = 1.0f;
-            }
-            
-            ImGui::Text("Current Scale: %.2fx", font_scale);
-            ImGui::Unindent(10.0f);
-        }
-            
+            ImGui::TextDisabled("MAIN CONTROLS");
             ImGui::Spacing();
-            
-            // 📏 侧边栏宽度调节功能
-            static bool show_sidebar_width = true;
-            if (ImGui::CollapsingHeader("📏 Sidebar Width Control", &show_sidebar_width, ImGuiTreeNodeFlags_DefaultOpen))
-            {
-                ImGui::Indent(10.0f);
-                ImGui::Text("Sidebar Width Adjustment:");
-                
-                // 侧边栏宽度滑块控件
-                if (ImGui::SliderFloat("##SidebarWidth", &sidebar_width, min_sidebar_width, max_sidebar_width, "%.0f px"))
-                {
-                    // 滑块值改变时自动应用，无需额外处理
-                }
-                
-                ImGui::SameLine();
-                if (ImGui::Button("Reset##SidebarWidth", ImVec2(50, 0)))
-                {
-                    sidebar_width = 280.0f; // 重置为默认宽度
-                }
-                
-                ImGui::Text("Current Width: %.0f px", sidebar_width);
-                ImGui::Text("Range: %.0f - %.0f px", min_sidebar_width, max_sidebar_width);
-                ImGui::Unindent(10.0f);
-            }
-            
-            ImGui::Spacing();
-            
-            // 📊 性能信息折叠菜单
+
+            // 📊 性能概览 (Simplified)
             static bool show_performance = true;
-            if (ImGui::CollapsingHeader("📊 Performance Monitor", &show_performance, ImGuiTreeNodeFlags_DefaultOpen))
+            if (ImGui::CollapsingHeader("📊 Performance", &show_performance, ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent(10.0f);
-                ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-                ImGui::Text("Frame Time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
+                ImGui::Text("FPS: %.1f (%.2f ms)", ImGui::GetIO().Framerate, 1000.0f / ImGui::GetIO().Framerate);
                 if (m_render_resource)
                 {
-                    ImGui::Text("Models: %zu", m_render_resource->getLoadedRenderObjects().size());
+                    ImGui::Text("Objects: %zu", m_render_resource->getLoadedRenderObjects().size());
                 }
                 ImGui::Unindent(10.0f);
             }
         
-        ImGui::Spacing();
+            ImGui::Spacing();
         
-        // 🎮 变换控制折叠菜单
-        static bool show_transform = true;
-        if (ImGui::CollapsingHeader("🎮 Transform Control", &show_transform, ImGuiTreeNodeFlags_DefaultOpen))
-        {
-            ImGui::Indent(10.0f);
-        
-            if (m_render_resource && !m_render_resource->getLoadedRenderObjects().empty())
+            // 🏗️ 场景层级与检视器 (Merged Hierarchy & Inspector)
+            static bool show_hierarchy = true;
+            if (ImGui::CollapsingHeader("🏗️ Hierarchy & Inspector", &show_hierarchy, ImGuiTreeNodeFlags_DefaultOpen))
             {
-                auto& renderObjects = m_render_resource->getLoadedRenderObjects();
-                static int selected_model = 0;
-                
-                // Model selection dropdown
-                ImGui::Text("Model:");
-                ImGui::PushItemWidth(-1);
-                if (ImGui::BeginCombo("##Model", selected_model < renderObjects.size() ? renderObjects[selected_model].name.c_str() : "Select Model"))
-                {
-                    for (size_t i = 0; i < renderObjects.size(); ++i)
-                    {
-                        bool is_selected = (selected_model == static_cast<int>(i));
-                        if (ImGui::Selectable(renderObjects[i].name.c_str(), is_selected))
-                        {
-                            selected_model = static_cast<int>(i);
-                        }
-                        if (is_selected)
-                        {
-                            ImGui::SetItemDefaultFocus();
-                        }
-                    }
-                    ImGui::EndCombo();
-                }
-                ImGui::PopItemWidth();
+                ImGui::Indent(10.0f);
             
-                if (selected_model >= 0 && selected_model < static_cast<int>(renderObjects.size()))
+                if (m_render_resource && !m_render_resource->getLoadedRenderObjects().empty())
                 {
-                    auto& selectedObject = renderObjects[selected_model];
-                    auto& animParams = selectedObject.animationParams;
+                    auto& renderObjects = m_render_resource->getLoadedRenderObjects();
+                    static int selected_model = 0;
+                    
+                    // 1. Hierarchy List
+                    ImGui::Text("Scene Objects:");
+                    if (ImGui::BeginListBox("##SceneObjects", ImVec2(-1, 100)))
+                    {
+                        for (size_t i = 0; i < renderObjects.size(); ++i)
+                        {
+                            bool is_selected = (selected_model == static_cast<int>(i));
+                            if (ImGui::Selectable(renderObjects[i].name.c_str(), is_selected))
+                            {
+                                selected_model = static_cast<int>(i);
+                            }
+                            if (is_selected)
+                            {
+                                ImGui::SetItemDefaultFocus();
+                            }
+                        }
+                        ImGui::EndListBox();
+                    }
                     
                     ImGui::Spacing();
-                    
-                    // Position control
-                    ImGui::Text("Position:");
-                    float position[3] = { animParams.position.x, animParams.position.y, animParams.position.z };
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::DragFloat3("##Position", position, 0.1f, -100.0f, 100.0f, "%.1f"))
-                    {
-                        ModelAnimationParams updatedParams = animParams;
-                        updatedParams.position = glm::vec3(position[0], position[1], position[2]);
-                        m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
-                    }
-                    ImGui::PopItemWidth();
-                    
-                    // Rotation control
-                    ImGui::Text("Rotation:");
-                    float rotation[3] = { 
-                        glm::degrees(animParams.rotation.x), 
-                        glm::degrees(animParams.rotation.y), 
-                        glm::degrees(animParams.rotation.z) 
-                    };
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::DragFloat3("##Rotation", rotation, 1.0f, -180.0f, 180.0f, "%.0f°"))
-                    {
-                        ModelAnimationParams updatedParams = animParams;
-                        updatedParams.rotation = glm::vec3(
-                            glm::radians(rotation[0]), 
-                            glm::radians(rotation[1]), 
-                            glm::radians(rotation[2])
-                        );
-                        m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
-                    }
-                    ImGui::PopItemWidth();
-                    
-                    // Scale control
-                    ImGui::Text("Scale:");
-                    float scale[3] = { animParams.scale.x, animParams.scale.y, animParams.scale.z };
-                    ImGui::PushItemWidth(-1);
-                    if (ImGui::DragFloat3("##Scale", scale, 0.01f, 0.01f, 10.0f, "%.2f"))
-                    {
-                        ModelAnimationParams updatedParams = animParams;
-                        updatedParams.scale = glm::vec3(scale[0], scale[1], scale[2]);
-                        m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
-                    }
-                    ImGui::PopItemWidth();
-                    
+                    ImGui::Separator();
                     ImGui::Spacing();
-                    
-                    // Animation control
-                    bool enableAnimation = animParams.enableAnimation;
-                    if (ImGui::Checkbox("Auto Rotate", &enableAnimation))
+                
+                    // 2. Inspector (Transform)
+                    if (selected_model >= 0 && selected_model < static_cast<int>(renderObjects.size()))
                     {
-                        ModelAnimationParams updatedParams = animParams;
-                        updatedParams.enableAnimation = enableAnimation;
-                        updatedParams.rotationSpeed = enableAnimation ? 1.0f : 0.0f;
-                        updatedParams.rotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-                        m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
-                    }
-                    
-                    if (animParams.enableAnimation)
-                    {
-                        ImGui::Text("Speed:");
-                        float rotationSpeed = animParams.rotationSpeed;
+                        auto& selectedObject = renderObjects[selected_model];
+                        auto& animParams = selectedObject.animationParams;
+                        
+                        ImGui::Text("Inspector: %s", selectedObject.name.c_str());
+                        ImGui::Spacing();
+                        
+                        // Position
+                        ImGui::Text("Position");
+                        float position[3] = { animParams.position.x, animParams.position.y, animParams.position.z };
                         ImGui::PushItemWidth(-1);
-                        if (ImGui::DragFloat("##Speed", &rotationSpeed, 0.1f, 0.0f, 5.0f, "%.1f"))
+                        if (ImGui::DragFloat3("##Position", position, 0.1f))
                         {
                             ModelAnimationParams updatedParams = animParams;
-                            updatedParams.rotationSpeed = rotationSpeed;
+                            updatedParams.position = glm::vec3(position[0], position[1], position[2]);
                             m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
                         }
                         ImGui::PopItemWidth();
-                    }
-                    
-                    ImGui::Spacing();
-                    
-                    // Control buttons
-                    if (ImGui::Button("Reset", ImVec2(-1, 0)))
-                    {
-                        ModelAnimationParams resetParams = animParams;
-                        resetParams.position = glm::vec3(0.0f);
-                        resetParams.rotation = glm::vec3(0.0f);
-                        resetParams.scale = glm::vec3(1.0f);
-                        resetParams.enableAnimation = false;
-                        m_render_resource->updateRenderObjectAnimationParams(selected_model, resetParams);
-                    }
-                    
-                    if (ImGui::Button("Save Config", ImVec2(-1, 0)))
-                    {
-                        saveModelConfiguration();
+                        
+                        // Rotation
+                        ImGui::Text("Rotation");
+                        float rotation[3] = { 
+                            glm::degrees(animParams.rotation.x), 
+                            glm::degrees(animParams.rotation.y), 
+                            glm::degrees(animParams.rotation.z) 
+                        };
+                        ImGui::PushItemWidth(-1);
+                        if (ImGui::DragFloat3("##Rotation", rotation, 1.0f))
+                        {
+                            ModelAnimationParams updatedParams = animParams;
+                            updatedParams.rotation = glm::vec3(
+                                glm::radians(rotation[0]), 
+                                glm::radians(rotation[1]), 
+                                glm::radians(rotation[2])
+                            );
+                            m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
+                        }
+                        ImGui::PopItemWidth();
+                        
+                        // Scale
+                        ImGui::Text("Scale");
+                        float scale[3] = { animParams.scale.x, animParams.scale.y, animParams.scale.z };
+                        ImGui::PushItemWidth(-1);
+                        if (ImGui::DragFloat3("##Scale", scale, 0.01f, 0.01f, 10.0f))
+                        {
+                            ModelAnimationParams updatedParams = animParams;
+                            updatedParams.scale = glm::vec3(scale[0], scale[1], scale[2]);
+                            m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
+                        }
+                        ImGui::PopItemWidth();
+                        
+                        ImGui::Spacing();
+                        
+                        // Auto Rotate
+                        bool enableAnimation = animParams.enableAnimation;
+                        if (ImGui::Checkbox("Auto Rotate", &enableAnimation))
+                        {
+                            ModelAnimationParams updatedParams = animParams;
+                            updatedParams.enableAnimation = enableAnimation;
+                            if (enableAnimation) {
+                                updatedParams.rotationSpeed = 1.0f;
+                                updatedParams.rotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+                            }
+                            m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
+                        }
                     }
                 }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No objects in scene");
+                }
+                ImGui::Unindent(10.0f);
             }
-            else
-            {
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "No models available");
-            }
-            ImGui::Unindent(10.0f);
-        }
         
         ImGui::Spacing();
         
@@ -608,66 +620,8 @@ namespace Elish
                     if (raytracing_enabled)
                     {
                         ImGui::Spacing();
-                        ImGui::Separator();
-                        ImGui::Text("📊 Ray Tracing Parameters:");
-                        ImGui::Spacing();
                         
-                        // 光线追踪参数控制
-                        static int max_ray_depth = 5;
-                        ImGui::Text("Max Ray Depth:");
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::SliderInt("##MaxRayDepth", &max_ray_depth, 1, 10))
-                        {
-                            // 更新光线追踪参数
-                            // TODO: 实现参数更新逻辑
-                        }
-                        ImGui::PopItemWidth();
-                        
-                        ImGui::Spacing();
-                        
-                        // 采样数控制
-                        static int samples_per_pixel = 1;
-                        ImGui::Text("Samples Per Pixel:");
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::SliderInt("##SamplesPerPixel", &samples_per_pixel, 1, 16))
-                        {
-                            // 更新采样参数
-                            // TODO: 实现参数更新逻辑
-                        }
-                        ImGui::PopItemWidth();
-                        
-                        ImGui::Spacing();
-                        
-                        // 光线追踪输出分辨率控制
-                        static float resolution_scale = 1.0f;
-                        ImGui::Text("Resolution Scale:");
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::SliderFloat("##ResolutionScale", &resolution_scale, 0.25f, 2.0f, "%.2fx"))
-                        {
-                            // 更新分辨率缩放
-                            // TODO: 实现分辨率更新逻辑
-                        }
-                        ImGui::PopItemWidth();
-                        
-                        ImGui::Spacing();
-                        ImGui::Separator();
-                        ImGui::Text("🎨 Rendering Mode:");
-                        ImGui::Spacing();
-                        
-                        // 渲染模式选择
-                        static int render_mode = 0; // 0: 混合模式, 1: 纯光线追踪, 2: 光栅化对比
-                        const char* render_modes[] = { "Hybrid (RT + Raster)", "Pure Ray Tracing", "Rasterization Only" };
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::Combo("##RenderMode", &render_mode, render_modes, IM_ARRAYSIZE(render_modes)))
-                        {
-                            // 更新渲染模式
-                            // TODO: 实现渲染模式切换逻辑
-                        }
-                        ImGui::PopItemWidth();
-                        
-                        ImGui::Spacing();
-                        
-                        // 光线追踪效果开关
+                        // 1. Effects (Common)
                         static bool enable_reflections = true;
                         static bool enable_shadows = true;
                         static bool enable_global_illumination = false;
@@ -676,85 +630,68 @@ namespace Elish
                         ImGui::Checkbox("Reflections", &enable_reflections);
                         ImGui::SameLine();
                         ImGui::Checkbox("Shadows", &enable_shadows);
-                        ImGui::Checkbox("Global Illumination", &enable_global_illumination);
+                        ImGui::SameLine();
+                        ImGui::Checkbox("GI", &enable_global_illumination);
                         
                         ImGui::Spacing();
-                        ImGui::Separator();
-                        ImGui::Text("⚡ Performance:");
+                        
+                        // 2. Quality Presets (Common)
+                        ImGui::Text("Quality:");
+                        static int max_ray_depth = 5;
+                        static int samples_per_pixel = 1;
+                        static float resolution_scale = 1.0f;
+
+                        if (ImGui::Button("Low")) { max_ray_depth = 3; samples_per_pixel = 1; resolution_scale = 0.5f; }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Med")) { max_ray_depth = 5; samples_per_pixel = 2; resolution_scale = 0.75f; }
+                        ImGui::SameLine();
+                        if (ImGui::Button("High")) { max_ray_depth = 8; samples_per_pixel = 4; resolution_scale = 1.0f; }
+                        ImGui::SameLine();
+                        if (ImGui::Button("Ultra")) { max_ray_depth = 10; samples_per_pixel = 8; resolution_scale = 1.0f; }
+                        
                         ImGui::Spacing();
                         
-                        // 性能统计显示
-                        ImGui::Text("RT Frame Time: %.3f ms", 0.0f); // TODO: 获取实际性能数据
-                        ImGui::Text("Rays/Second: %.1fM", 0.0f); // TODO: 获取实际性能数据
+                        // 3. Advanced Parameters (Folded)
+                        if (ImGui::TreeNode("Advanced Parameters"))
+                        {
+                            ImGui::Text("Max Ray Depth:");
+                            ImGui::SliderInt("##MaxRayDepth", &max_ray_depth, 1, 10);
+                            
+                            ImGui::Text("Samples Per Pixel:");
+                            ImGui::SliderInt("##SamplesPerPixel", &samples_per_pixel, 1, 16);
+                            
+                            ImGui::Text("Resolution Scale:");
+                            ImGui::SliderFloat("##ResolutionScale", &resolution_scale, 0.25f, 2.0f, "%.2fx");
+                            
+                            ImGui::Separator();
+                            
+                            static int render_mode = 0;
+                            const char* render_modes[] = { "Hybrid", "Pure RT", "Raster Only" };
+                            ImGui::Combo("Render Mode", &render_mode, render_modes, IM_ARRAYSIZE(render_modes));
+                            
+                            ImGui::TreePop();
+                        }
                         
-                        // 性能预设按钮
-                         ImGui::Spacing();
-                         ImGui::Text("Quality Presets:");
-                         if (ImGui::Button("Low", ImVec2(60, 0)))
-                         {
-                             max_ray_depth = 3;
-                             samples_per_pixel = 1;
-                             resolution_scale = 0.5f;
-                         }
-                         ImGui::SameLine();
-                         if (ImGui::Button("Medium", ImVec2(60, 0)))
-                         {
-                             max_ray_depth = 5;
-                             samples_per_pixel = 2;
-                             resolution_scale = 0.75f;
-                         }
-                         ImGui::SameLine();
-                         if (ImGui::Button("High", ImVec2(60, 0)))
-                         {
-                             max_ray_depth = 8;
-                             samples_per_pixel = 4;
-                             resolution_scale = 1.0f;
-                         }
-                         ImGui::SameLine();
-                         if (ImGui::Button("Ultra", ImVec2(60, 0)))
-                         {
-                             max_ray_depth = 10;
-                             samples_per_pixel = 8;
-                             resolution_scale = 1.0f;
-                         }
-                         
-                         ImGui::Spacing();
-                         ImGui::Separator();
-                         ImGui::Text("🎬 Demo Scenes:");
-                         ImGui::Spacing();
-                         
-                         // 演示场景加载按钮
-                         if (ImGui::Button("Load RT Demo Scene", ImVec2(-1, 0)))
-                         {
-                             loadRayTracingDemoScene();
-                         }
-                         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Loads a scene with reflective spheres");
-                         ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "and materials optimized for RT.");
-                         
-                         ImGui::Spacing();
-                         
-                         if (ImGui::Button("Reset to Default Scene", ImVec2(-1, 0)))
-                         {
-                             resetToDefaultScene();
-                         }
+                        // 4. Demo Scenes (Folded)
+                        if (ImGui::TreeNode("Demo Scenes"))
+                        {
+                             if (ImGui::Button("Load RT Demo Scene", ImVec2(-1, 0)))
+                             {
+                                 loadRayTracingDemoScene();
+                             }
+                             if (ImGui::Button("Reset Scene", ImVec2(-1, 0)))
+                             {
+                                 resetToDefaultScene();
+                             }
+                             ImGui::TreePop();
+                        }
                     }
                     else
                     {
-                        ImGui::Spacing();
-                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Ray tracing is disabled.");
-                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Enable to access RT settings.");
+                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "RT is disabled.");
                     }
                 }
-                else
-                {
-                    ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "Render pipeline not available");
-                }
             }
-            else
-            {
-                ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "Render system not available");
-            }
-            
             ImGui::Unindent(10.0f);
         }
         
@@ -1074,45 +1011,179 @@ namespace Elish
             ImGui::EndChild(); // 结束左侧边栏
             
             // 📏 可拖拽的分隔线（仅在边栏展开时显示）
-            ImGui::SameLine();
+            // 显式设置光标位置到侧边栏右侧（基于当前动画宽度），确保位置准确且可见
+            ImGui::SetCursorPos(ImVec2(30.0f + animated_content_width, 0.0f));
             
-            // 设置分隔线样式
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.3f, 0.5f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.4f, 0.6f, 0.8f, 0.8f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
+            // 使用不可见按钮作为交互区域
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
             
-            // 创建可拖拽的分隔线按钮
-            bool splitter_hovered = false;
-            if (ImGui::Button("##splitter", ImVec2(8.0f, -1)))
-            {
-                // 分隔线被点击
-            }
+            // 按钮填充剩余高度
+            ImGui::Button("##splitter", ImVec2(8.0f, -1));
+            
+            ImGui::PopStyleColor(3);
+            
+            // 绘制可视化的分隔线 (类似底部面板的样式)
+            bool is_hovered = ImGui::IsItemHovered();
+            bool is_active = ImGui::IsItemActive();
+            
+            ImU32 color;
+            if (is_active) color = ImGui::GetColorU32(ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
+            else if (is_hovered) color = ImGui::GetColorU32(ImVec4(0.4f, 0.6f, 0.8f, 0.8f));
+            else color = ImGui::GetColorU32(ImVec4(0.1f, 0.1f, 0.1f, 0.5f)); // Make it slightly darker/visible
+            
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                ImGui::GetItemRectMin(), 
+                ImGui::GetItemRectMax(), 
+                color
+            );
+
+            // 绘制一个细边框，确保即使背景色很暗也能看清位置
+            ImGui::GetWindowDrawList()->AddRect(
+                ImGui::GetItemRectMin(), 
+                ImGui::GetItemRectMax(), 
+                ImGui::GetColorU32(ImVec4(0.3f, 0.3f, 0.3f, 0.3f))
+            );
             
             // 检测鼠标悬停状态
-            if (ImGui::IsItemHovered())
+            if (is_hovered)
             {
-                splitter_hovered = true;
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW); // 设置水平调整光标
                 ImGui::SetTooltip("Drag to resize sidebar");
             }
             
             // 处理拖拽逻辑
-             if (ImGui::IsItemActive())
-             {
+            if (is_active)
+            {
                  float delta_x = ImGui::GetIO().MouseDelta.x;
                  sidebar_width += delta_x;
                  
                  // 应用边界限制，同时考虑视口限制
                  float max_allowed_width = (viewport->WorkSize.x * 0.8f) - 8.0f; // 减去分隔线宽度
                  sidebar_width = std::max(min_sidebar_width, std::min(std::min(max_sidebar_width, max_allowed_width), sidebar_width));
-             }
-            
-            ImGui::PopStyleColor(3);
+                 
+                 // 拖拽时标记视口需要更新
+                 layoutState.isViewportDirty = true;
+                 
+                 // 拖拽时直接同步动画宽度，消除延迟感
+                 animated_content_width = sidebar_width;
+            }
         }
         
         // 主内容区域已删除，界面只保留左侧边栏
         
         ImGui::End(); // 结束主窗口
+
+        // 📂 底部资产面板
+        {
+            float asset_panel_x = viewport->WorkPos.x + window_width;
+            float asset_panel_y = viewport->WorkPos.y + viewport->WorkSize.y - bottom_panel_height;
+            float asset_panel_w = viewport->WorkSize.x - window_width;
+            
+            // 设置资产面板窗口位置和大小
+            ImGui::SetNextWindowPos(ImVec2(asset_panel_x, asset_panel_y));
+            ImGui::SetNextWindowSize(ImVec2(asset_panel_w, bottom_panel_height));
+            ImGui::SetNextWindowViewport(viewport->ID);
+            
+            ImGuiWindowFlags asset_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | 
+                                          ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                          ImGuiWindowFlags_NoBringToFrontOnFocus;
+                                          
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+            
+            ImGui::Begin("Asset Browser", nullptr, asset_flags);
+            ImGui::PopStyleVar(3);
+            
+            // 📏 顶部调整分隔线 (Invisible button at top)
+            ImGui::SetCursorPos(ImVec2(0, 0));
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+            ImGui::Button("##hsplitter", ImVec2(-1, 8.0f));
+            ImGui::PopStyleColor();
+            
+            // 绘制可视化的分隔线
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                ImGui::GetItemRectMin(), 
+                ImGui::GetItemRectMax(), 
+                ImGui::GetColorU32(ImGui::IsItemHovered() ? ImVec4(0.4f, 0.6f, 0.8f, 0.8f) : ImVec4(0.2f, 0.2f, 0.2f, 0.5f))
+            );
+            
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+                ImGui::SetTooltip("Drag to resize asset panel");
+            }
+            if (ImGui::IsItemActive())
+            {
+                float delta_y = ImGui::GetIO().MouseDelta.y;
+                bottom_panel_height -= delta_y;
+                bottom_panel_height = std::max(min_bottom_panel_height, std::min(max_bottom_panel_height, bottom_panel_height));
+                
+                // 标记视口需要更新
+                layoutState.isViewportDirty = true;
+            }
+            
+            // 资产内容
+            ImGui::SetCursorPosY(10.0f); // Move down past splitter
+            ImGui::Text("📂 Asset Browser");
+            ImGui::SameLine();
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(Drag top edge to resize)");
+            
+            ImGui::Separator();
+            
+            // 简单的标签页
+            static int selected_tab = 0;
+            if (ImGui::Button("Models")) selected_tab = 0;
+            ImGui::SameLine();
+            if (ImGui::Button("Materials")) selected_tab = 1;
+            ImGui::SameLine();
+            if (ImGui::Button("Textures")) selected_tab = 2;
+             ImGui::SameLine();
+            if (ImGui::Button("Shaders")) selected_tab = 3;
+            
+            ImGui::Spacing();
+            
+            if (selected_tab == 0)
+            {
+                // 显示模型列表（简单示例）
+                if (ImGui::BeginChild("AssetList", ImVec2(0, 0), true))
+                {
+                    // 简单的网格布局
+                    float item_size = 90.0f;
+                    float window_visible_x = ImGui::GetContentRegionAvail().x;
+                    int columns = std::max(1, (int)(window_visible_x / (item_size + 10.0f)));
+                    
+                    for (int i = 0; i < 15; ++i)
+                    {
+                        ImGui::PushID(i);
+                        if (i % columns != 0) ImGui::SameLine();
+                        
+                        ImGui::BeginGroup();
+                        // 占位图标
+                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.35f, 1.0f));
+                        ImGui::Button("##Icon", ImVec2(item_size, item_size * 0.8f));
+                        ImGui::PopStyleColor();
+                        
+                        // 文本截断
+                        char label[32];
+                        sprintf(label, "Model_%02d", i);
+                        ImGui::Text("%s", label);
+                        ImGui::EndGroup();
+                        
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::EndChild();
+            }
+            else
+            {
+                 ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No items in this category");
+            }
+            
+            ImGui::End();
+        }
     }
 
     /**
@@ -1466,11 +1537,119 @@ namespace Elish
             }
         }
         
-        // 注意：这里暂时只实现了光照设置的应用
-        // 完整的场景加载（包括几何体、材质等）需要更复杂的资源管理系统
-        // 这将在后续的开发中实现
+        // 应用场景对象
+        if (scene_config["objects"].is_array())
+        {
+            for (const auto& obj_json : scene_config["objects"].array_items())
+            {
+                std::string name = obj_json["name"].string_value();
+                std::string type = obj_json["type"].string_value();
+                std::string model_path = obj_json["model_path"].string_value();
+                if (model_path.empty())
+                {
+                    // 尝试兼容 levels1.json 的 model_paths 字段
+                    model_path = obj_json["model_paths"].string_value();
+                }
+                
+                // 如果没有指定路径，尝试根据类型推断
+                if (model_path.empty() && !type.empty())
+                {
+                    model_path = "engine/runtime/content/models/" + type + ".obj";
+                }
+                
+                // 如果还是空的，跳过
+                if (model_path.empty()) 
+                {
+                    LOG_WARN("[UIPass] Object '{}' missing model path or type", name);
+                    continue;
+                }
+
+                // 纹理处理
+                std::vector<std::string> texture_paths;
+                if (obj_json["textures"].is_array())
+                {
+                    for (const auto& tex : obj_json["textures"].array_items())
+                    {
+                        texture_paths.push_back(tex.string_value());
+                    }
+                }
+                // 兼容 levels1.json 的格式 (model_texture_map)
+                else if (obj_json["model_texture_map"].is_array())
+                {
+                    for (const auto& tex : obj_json["model_texture_map"].array_items())
+                    {
+                        texture_paths.push_back(tex.string_value());
+                    }
+                }
+
+                RenderObject renderObject;
+                renderObject.name = name;
+                
+                // 加载资源
+                // 注意：createRenderObjectResource 需要实现具体的加载逻辑
+                if (m_render_resource->createRenderObjectResource(renderObject, model_path, texture_paths))
+                {
+                    // 应用变换
+                    if (obj_json["transform"].is_object())
+                    {
+                        const auto& transform = obj_json["transform"];
+                        
+                        // Position
+                        if (transform["position"].is_array())
+                        {
+                            auto pos = transform["position"].array_items();
+                            if (pos.size() >= 3)
+                            {
+                                renderObject.animationParams.position = glm::vec3(
+                                    static_cast<float>(pos[0].number_value()), 
+                                    static_cast<float>(pos[1].number_value()), 
+                                    static_cast<float>(pos[2].number_value())
+                                );
+                            }
+                        }
+                        
+                        // Rotation
+                        if (transform["rotation"].is_array())
+                        {
+                            auto rot = transform["rotation"].array_items();
+                            if (rot.size() >= 3)
+                            {
+                                // 假设 JSON 中的旋转是角度制，转换为弧度
+                                renderObject.animationParams.rotation = glm::vec3(
+                                    glm::radians(static_cast<float>(rot[0].number_value())), 
+                                    glm::radians(static_cast<float>(rot[1].number_value())), 
+                                    glm::radians(static_cast<float>(rot[2].number_value()))
+                                );
+                            }
+                        }
+                        
+                        // Scale
+                        if (transform["scale"].is_array())
+                        {
+                            auto scale = transform["scale"].array_items();
+                            if (scale.size() >= 3)
+                            {
+                                renderObject.animationParams.scale = glm::vec3(
+                                    static_cast<float>(scale[0].number_value()), 
+                                    static_cast<float>(scale[1].number_value()), 
+                                    static_cast<float>(scale[2].number_value())
+                                );
+                            }
+                        }
+                    }
+                    
+                    // 将对象添加到资源管理器
+                    m_render_resource->addRenderObject(renderObject);
+                    LOG_INFO("[UIPass] Loaded object: {}", name);
+                }
+                else
+                {
+                    LOG_ERROR("[UIPass] Failed to load model: {}", model_path);
+                }
+            }
+        }
         
-        LOG_INFO("[UIPass] Scene lighting configuration applied");
+        LOG_INFO("[UIPass] Scene lighting and objects configuration applied");
     }
 
 } // namespace Elish

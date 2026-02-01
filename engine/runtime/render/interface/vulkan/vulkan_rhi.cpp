@@ -84,9 +84,19 @@ namespace Elish
 
     void VulkanRHI::initialize(RHIInitInfo init_info)
     {
-
+        // 检查窗口系统是否有效
+        if (!init_info.window_system) {
+            LOG_FATAL("[VulkanRHI] Window system is null during initialization!");
+            throw std::runtime_error("Window system is null");
+        }
 
         m_window = init_info.window_system->getWindow();
+        
+        // 检查窗口指针是否有效
+        if (!m_window) {
+            LOG_FATAL("[VulkanRHI] Failed to get valid window from window system!");
+            throw std::runtime_error("Window is null");
+        }
 
         std::array<int, 2> window_size = init_info.window_system->getWindowSize();
 
@@ -95,11 +105,11 @@ namespace Elish
         m_scissor  = {{0, 0}, {(uint32_t)window_size[0], (uint32_t)window_size[1]}};
 
 #ifndef NDEBUG
-        m_enable_validation_Layers = true;  // 临时禁用验证层以避免系统缺少验证层的问题
-        m_enable_debug_utils_label = true;
+        m_enable_validation_Layers = false;  // 禁用验证层以避免系统缺少验证层的问题
+        m_enable_debug_utils_label = false;
 #else
-        m_enable_validation_Layers  = true;
-        m_enable_debug_utils_label  = true;
+        m_enable_validation_Layers  = false;
+        m_enable_debug_utils_label  = false;
 #endif
 
 #if defined(__GNUC__) && defined(__MACH__)
@@ -556,7 +566,36 @@ namespace Elish
         
         if (VK_SUCCESS != res_queue_submit)
         {
-            LOG_ERROR("vkQueueSubmit failed!");
+            const char* errorString = "Unknown VkResult";
+            switch (res_queue_submit) {
+                case VK_ERROR_OUT_OF_HOST_MEMORY: errorString = "VK_ERROR_OUT_OF_HOST_MEMORY"; break;
+                case VK_ERROR_OUT_OF_DEVICE_MEMORY: errorString = "VK_ERROR_OUT_OF_DEVICE_MEMORY"; break;
+                case VK_ERROR_INITIALIZATION_FAILED: errorString = "VK_ERROR_INITIALIZATION_FAILED"; break;
+                case VK_ERROR_DEVICE_LOST: errorString = "VK_ERROR_DEVICE_LOST"; break;
+                case VK_ERROR_MEMORY_MAP_FAILED: errorString = "VK_ERROR_MEMORY_MAP_FAILED"; break;
+                case VK_ERROR_LAYER_NOT_PRESENT: errorString = "VK_ERROR_LAYER_NOT_PRESENT"; break;
+                case VK_ERROR_EXTENSION_NOT_PRESENT: errorString = "VK_ERROR_EXTENSION_NOT_PRESENT"; break;
+                case VK_ERROR_FEATURE_NOT_PRESENT: errorString = "VK_ERROR_FEATURE_NOT_PRESENT"; break;
+                case VK_ERROR_INCOMPATIBLE_DRIVER: errorString = "VK_ERROR_INCOMPATIBLE_DRIVER"; break;
+                case VK_ERROR_TOO_MANY_OBJECTS: errorString = "VK_ERROR_TOO_MANY_OBJECTS"; break;
+                case VK_ERROR_FORMAT_NOT_SUPPORTED: errorString = "VK_ERROR_FORMAT_NOT_SUPPORTED"; break;
+                case VK_ERROR_FRAGMENTED_POOL: errorString = "VK_ERROR_FRAGMENTED_POOL"; break;
+                case VK_ERROR_UNKNOWN: errorString = "VK_ERROR_UNKNOWN"; break;
+                default: errorString = "Unknown VkResult"; break;
+            }
+            LOG_ERROR("vkQueueSubmit failed with result: {} ({})", res_queue_submit, errorString);
+            
+            // 检查设备丢失情况
+            if (res_queue_submit == VK_ERROR_DEVICE_LOST)
+            {
+                LOG_ERROR("Device lost detected! GPU may have crashed or driver issue occurred.");
+                LOG_ERROR("This usually indicates:");
+                LOG_ERROR("1. GPU driver crash or timeout");
+                LOG_ERROR("2. Invalid GPU commands or memory corruption");
+                LOG_ERROR("3. Hardware failure or overheating");
+                LOG_ERROR("4. Insufficient GPU memory");
+                // 可以在这里添加设备重置逻辑
+            }
             return;
         }
 
@@ -627,6 +666,13 @@ namespace Elish
     }
 
     // validation layers
+    /**
+     * @brief 检查验证层支持情况
+     * @return 如果所有请求的验证层都可用则返回true，否则返回false
+     * 
+     * 该函数会枚举系统中所有可用的Vulkan实例层，并检查是否包含所需的验证层。
+     * 同时会输出详细的层信息以帮助开发者诊断问题。
+     */
     bool VulkanRHI::checkValidationLayerSupport()
     {
         uint32_t layerCount;
@@ -635,6 +681,14 @@ namespace Elish
         std::vector<VkLayerProperties> availableLayers(layerCount);
         vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
 
+        LOG_INFO("Available Vulkan layers ({} total):", layerCount);
+        for (const auto& layer : availableLayers)
+        {
+            LOG_INFO("  - {} (spec version: {}, impl version: {})", 
+                     layer.layerName, layer.specVersion, layer.implementationVersion);
+        }
+
+        LOG_INFO("Checking required validation layers:");
         for (const char* layerName : m_validation_layers)
         {
             bool layerFound = false;
@@ -644,17 +698,20 @@ namespace Elish
                 if (strcmp(layerName, layerProperties.layerName) == 0)
                 {
                     layerFound = true;
+                    LOG_INFO("  ✓ Required layer '{}' found", layerName);
                     break;
                 }
             }
 
             if (!layerFound)
             {
+                LOG_ERROR("  ✗ Required layer '{}' not found", layerName);
                 return false;
             }
         }
 
-        return RHI_SUCCESS;
+        LOG_INFO("All required validation layers are available");
+        return true;
     }
 
     std::vector<const char*> VulkanRHI::getRequiredExtensions()
@@ -700,13 +757,17 @@ namespace Elish
 
     void VulkanRHI::createInstance()
     {
-        // validation layer will be enabled in debug mode
+        // 检查验证层支持，如果不可用则禁用验证层继续运行
         if (m_enable_validation_Layers && !checkValidationLayerSupport())
         {
-            LOG_ERROR("validation layers requested, but not available!");
+            LOG_WARN("validation layers requested, but not available!");
+            LOG_WARN("VK_LAYER_KHRONOS_validation layer is not found, disabling validation layers.");
+            LOG_WARN("For better debugging experience, please install Vulkan SDK with validation layers.");
+            LOG_WARN("Download from: https://vulkan.lunarg.com/sdk/home");
+            m_enable_validation_Layers = false; // 禁用验证层以允许程序继续运行
         }
 
-        m_vulkan_api_version = VK_API_VERSION_1_0;
+        m_vulkan_api_version = VK_API_VERSION_1_2;
 
         // app info
         VkApplicationInfo appInfo {};
@@ -722,9 +783,40 @@ namespace Elish
         instance_create_info.sType            = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
         instance_create_info.pApplicationInfo = &appInfo; // the appInfo is stored here
 
-        auto extensions                              = getRequiredExtensions();
-        instance_create_info.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
-        instance_create_info.ppEnabledExtensionNames = extensions.data();
+        auto extensions = getRequiredExtensions();
+        
+        // 检查扩展支持
+        uint32_t extensionCount = 0;
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.data());
+        
+        std::vector<const char*> supportedExtensions;
+        for (const char* requiredExt : extensions) {
+            bool found = false;
+            for (const auto& availableExt : availableExtensions) {
+                if (strcmp(requiredExt, availableExt.extensionName) == 0) {
+                    found = true;
+                    break;
+                }
+            }
+            if (found) {
+                supportedExtensions.push_back(requiredExt);
+            } else {
+                LOG_WARN("Extension {} not available, skipping", requiredExt);
+            }
+        }
+        
+        // 检查是否有足够的扩展支持
+        if (supportedExtensions.empty()) {
+            LOG_ERROR("No supported Vulkan extensions found. Cannot create Vulkan instance.");
+            throw std::runtime_error("No supported Vulkan extensions available");
+        }
+        
+        instance_create_info.enabledExtensionCount   = static_cast<uint32_t>(supportedExtensions.size());
+        instance_create_info.ppEnabledExtensionNames = supportedExtensions.data();
+        
+        LOG_INFO("Using {} out of {} requested extensions", supportedExtensions.size(), extensions.size());
 
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo {};
         if (m_enable_validation_Layers)
@@ -742,10 +834,38 @@ namespace Elish
         }
 
         // create m_vulkan_context._instance
-        if (vkCreateInstance(&instance_create_info, nullptr, &m_instance) != VK_SUCCESS)
+        VkResult result = vkCreateInstance(&instance_create_info, nullptr, &m_instance);
+        if (result != VK_SUCCESS)
         {
-            LOG_ERROR("vk create instance");
+            LOG_ERROR("vk create instance failed with VkResult: {}", static_cast<int>(result));
+            switch (result)
+            {
+                case VK_ERROR_OUT_OF_HOST_MEMORY:
+                    LOG_ERROR("VK_ERROR_OUT_OF_HOST_MEMORY: Host memory allocation failed");
+                    break;
+                case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+                    LOG_ERROR("VK_ERROR_OUT_OF_DEVICE_MEMORY: Device memory allocation failed");
+                    break;
+                case VK_ERROR_INITIALIZATION_FAILED:
+                    LOG_ERROR("VK_ERROR_INITIALIZATION_FAILED: Vulkan initialization failed");
+                    break;
+                case VK_ERROR_LAYER_NOT_PRESENT:
+                    LOG_ERROR("VK_ERROR_LAYER_NOT_PRESENT: Requested layer not available");
+                    break;
+                case VK_ERROR_EXTENSION_NOT_PRESENT:
+                    LOG_ERROR("VK_ERROR_EXTENSION_NOT_PRESENT: Requested extension not available");
+                    break;
+                case VK_ERROR_INCOMPATIBLE_DRIVER:
+                    LOG_ERROR("VK_ERROR_INCOMPATIBLE_DRIVER: Driver incompatible with Vulkan");
+                    break;
+                default:
+                    LOG_ERROR("Unknown Vulkan instance creation error: {}", static_cast<int>(result));
+                    break;
+            }
+            throw std::runtime_error("Failed to create Vulkan instance");
         }
+        
+        LOG_INFO("Vulkan instance created successfully");
     }
 
     void VulkanRHI::initializeDebugMessenger()
@@ -754,9 +874,16 @@ namespace Elish
         {
             VkDebugUtilsMessengerCreateInfoEXT createInfo;
             populateDebugMessengerCreateInfo(createInfo);
-            if (VK_SUCCESS != createDebugUtilsMessengerEXT(m_instance, &createInfo, nullptr, &m_debug_messenger))
+            VkResult result = createDebugUtilsMessengerEXT(m_instance, &createInfo, nullptr, &m_debug_messenger);
+            if (VK_SUCCESS != result)
             {
-                LOG_ERROR("failed to set up debug messenger!");
+                LOG_ERROR("failed to set up debug messenger! VkResult: {}", static_cast<int>(result));
+                LOG_WARN("Continuing without debug messenger - debugging features will be limited");
+                m_debug_messenger = VK_NULL_HANDLE;
+            }
+            else
+            {
+                LOG_INFO("Debug messenger initialized successfully");
             }
         }
 
@@ -771,10 +898,15 @@ namespace Elish
 
     void VulkanRHI::createWindowSurface()
     {
-        if (glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface) != VK_SUCCESS)
+        VkResult result = glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface);
+        if (result != VK_SUCCESS)
         {
-            LOG_ERROR("glfwCreateWindowSurface failed!");
+            LOG_ERROR("glfwCreateWindowSurface failed! VkResult: {}", static_cast<int>(result));
+            LOG_ERROR("This usually indicates a problem with the window system or Vulkan instance");
+            throw std::runtime_error("Failed to create window surface");
         }
+        
+        LOG_INFO("Window surface created successfully");
     }
 
     void VulkanRHI::initializePhysicalDevice()
@@ -856,6 +988,11 @@ namespace Elish
             queue_create_infos.push_back(queue_create_info);
         }
 
+        // 首先创建基础设备扩展列表（只包含必需的扩展）
+        std::vector<const char*> required_extensions = {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+
         // 查询光线追踪相关特性和属性
         m_rt_pipeline_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
         m_rt_pipeline_features.pNext = nullptr;
@@ -875,32 +1012,40 @@ namespace Elish
         
         vkGetPhysicalDeviceFeatures2(m_physical_device, &physical_device_features2);
         
-        // 检查光线追踪支持
-        m_ray_tracing_supported = m_rt_pipeline_features.rayTracingPipeline &&
-                                 m_as_features.accelerationStructure &&
-                                 m_buffer_device_address_features.bufferDeviceAddress &&
-                                 m_descriptor_indexing_features.descriptorBindingPartiallyBound;
+        // 先查询光线追踪属性（无论是否支持都需要初始化结构体）
+        m_rt_pipeline_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+        m_rt_pipeline_properties.pNext = nullptr;
         
+        m_as_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
+        m_as_properties.pNext = &m_rt_pipeline_properties;
+        
+        VkPhysicalDeviceProperties2 physical_device_properties2 = {};
+        physical_device_properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+        physical_device_properties2.pNext = &m_as_properties;
+        
+        vkGetPhysicalDeviceProperties2(m_physical_device, &physical_device_properties2);
+        
+        // 增强的光线追踪兼容性检测
+        m_ray_tracing_supported = checkRayTracingCompatibility();
+        
+        // 根据支持情况添加光线追踪扩展
         if (m_ray_tracing_supported)
         {
-            // 查询光线追踪属性
-            m_rt_pipeline_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
-            m_rt_pipeline_properties.pNext = nullptr;
+            // 添加光线追踪依赖扩展（按依赖顺序）
+            required_extensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+            required_extensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+            required_extensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
+            required_extensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+            required_extensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
             
-            m_as_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR;
-            m_as_properties.pNext = &m_rt_pipeline_properties;
+            // 添加光线追踪核心扩展
+            required_extensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+            required_extensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+            required_extensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
             
-            VkPhysicalDeviceProperties2 physical_device_properties2 = {};
-            physical_device_properties2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-            physical_device_properties2.pNext = &m_as_properties;
-            
-            vkGetPhysicalDeviceProperties2(m_physical_device, &physical_device_properties2);
-            
-            LOG_INFO("Ray tracing supported! Max recursion depth: {}", m_rt_pipeline_properties.maxRayRecursionDepth);
-        }
-        else
-        {
-            LOG_WARN("Ray tracing not supported on this device");
+            LOG_INFO("Ray tracing fully supported! Max recursion depth: {}, Max geometry count: {}", 
+                     m_rt_pipeline_properties.maxRayRecursionDepth,
+                     m_as_properties.maxGeometryCount);
         }
 
         // physical device features
@@ -925,8 +1070,8 @@ namespace Elish
         device_create_info.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
         device_create_info.pQueueCreateInfos       = queue_create_infos.data();
         device_create_info.queueCreateInfoCount    = static_cast<uint32_t>(queue_create_infos.size());
-        device_create_info.enabledExtensionCount   = static_cast<uint32_t>(m_device_extensions.size());
-        device_create_info.ppEnabledExtensionNames = m_device_extensions.data();
+        device_create_info.enabledExtensionCount   = static_cast<uint32_t>(required_extensions.size());
+        device_create_info.ppEnabledExtensionNames = required_extensions.data();
         device_create_info.enabledLayerCount       = 0;
         
         // 如果支持光线追踪，使用特性链，否则使用传统特性
@@ -987,15 +1132,34 @@ namespace Elish
         _vkCmdClearAttachments   = (PFN_vkCmdClearAttachments)vkGetDeviceProcAddr(m_device, "vkCmdClearAttachments");
         _vkCmdPushConstants      = (PFN_vkCmdPushConstants)vkGetDeviceProcAddr(m_device, "vkCmdPushConstants");
         
-        // 初始化光线追踪相关函数指针
-        _vkCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(m_device, "vkCreateAccelerationStructureKHR");
-        _vkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(m_device, "vkDestroyAccelerationStructureKHR");
-        _vkGetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(m_device, "vkGetAccelerationStructureDeviceAddressKHR");
-        _vkGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(m_device, "vkGetAccelerationStructureBuildSizesKHR");
-        _vkCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(m_device, "vkCmdBuildAccelerationStructuresKHR");
-        _vkCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(m_device, "vkCreateRayTracingPipelinesKHR");
-        _vkGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(m_device, "vkGetRayTracingShaderGroupHandlesKHR");
-        _vkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(m_device, "vkCmdTraceRaysKHR");
+        // 只在支持光线追踪时初始化光线追踪相关函数指针
+        if (m_ray_tracing_supported)
+        {
+            _vkCreateAccelerationStructureKHR = (PFN_vkCreateAccelerationStructureKHR)vkGetDeviceProcAddr(m_device, "vkCreateAccelerationStructureKHR");
+            _vkDestroyAccelerationStructureKHR = (PFN_vkDestroyAccelerationStructureKHR)vkGetDeviceProcAddr(m_device, "vkDestroyAccelerationStructureKHR");
+            _vkGetAccelerationStructureDeviceAddressKHR = (PFN_vkGetAccelerationStructureDeviceAddressKHR)vkGetDeviceProcAddr(m_device, "vkGetAccelerationStructureDeviceAddressKHR");
+            _vkGetAccelerationStructureBuildSizesKHR = (PFN_vkGetAccelerationStructureBuildSizesKHR)vkGetDeviceProcAddr(m_device, "vkGetAccelerationStructureBuildSizesKHR");
+            _vkCmdBuildAccelerationStructuresKHR = (PFN_vkCmdBuildAccelerationStructuresKHR)vkGetDeviceProcAddr(m_device, "vkCmdBuildAccelerationStructuresKHR");
+            _vkCreateRayTracingPipelinesKHR = (PFN_vkCreateRayTracingPipelinesKHR)vkGetDeviceProcAddr(m_device, "vkCreateRayTracingPipelinesKHR");
+            _vkGetRayTracingShaderGroupHandlesKHR = (PFN_vkGetRayTracingShaderGroupHandlesKHR)vkGetDeviceProcAddr(m_device, "vkGetRayTracingShaderGroupHandlesKHR");
+            _vkCmdTraceRaysKHR = (PFN_vkCmdTraceRaysKHR)vkGetDeviceProcAddr(m_device, "vkCmdTraceRaysKHR");
+            
+            LOG_INFO("Ray tracing function pointers initialized successfully");
+        }
+        else
+        {
+            // 将光线追踪函数指针设置为nullptr以确保安全
+            _vkCreateAccelerationStructureKHR = nullptr;
+            _vkDestroyAccelerationStructureKHR = nullptr;
+            _vkGetAccelerationStructureDeviceAddressKHR = nullptr;
+            _vkGetAccelerationStructureBuildSizesKHR = nullptr;
+            _vkCmdBuildAccelerationStructuresKHR = nullptr;
+            _vkCreateRayTracingPipelinesKHR = nullptr;
+            _vkGetRayTracingShaderGroupHandlesKHR = nullptr;
+            _vkCmdTraceRaysKHR = nullptr;
+            
+            LOG_INFO("Ray tracing not supported - function pointers set to nullptr");
+        }
 
         m_depth_image_format = (RHIFormat)findDepthFormat();
     }
@@ -1857,6 +2021,12 @@ namespace Elish
      */
     bool VulkanRHI::createRayTracingPipelines(RHIPipelineCache* pipelineCache, uint32_t createInfoCount, const RHIRayTracingPipelineCreateInfo* pCreateInfos, RHIPipeline* &pPipelines)
     {
+        if (!m_ray_tracing_supported)
+        {
+            LOG_WARN("Ray tracing not supported, cannot create ray tracing pipelines");
+            return false;
+        }
+        
         if (!pCreateInfos || !_vkCreateRayTracingPipelinesKHR)
         {
             LOG_ERROR("Invalid parameters or ray tracing not supported!");
@@ -1953,11 +2123,6 @@ namespace Elish
             pPipelines = nullptr;
             return false;
         }
-        // 需要检查设备是否支持光线追踪扩展
-        // 创建VkRayTracingPipelineCreateInfoKHR结构
-        // 调用vkCreateRayTracingPipelinesKHR
-        LOG_ERROR("Ray tracing pipelines not implemented yet!");
-        return false;
     }
 
     /**
@@ -2020,6 +2185,19 @@ namespace Elish
             return false;
         }
 
+        // 验证输入参数
+        if (pBuildInfo->geometryCount == 0 || !pBuildInfo->pGeometries)
+        {
+            LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid geometry data!");
+            return false;
+        }
+
+        if (pBuildInfo->scratchData.deviceAddress == 0)
+        {
+            LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid scratch buffer device address!");
+            return false;
+        }
+
         // 创建几何信息数组
         std::vector<VkAccelerationStructureGeometryKHR> geometries;
         std::vector<VkAccelerationStructureBuildRangeInfoKHR> build_ranges;
@@ -2033,23 +2211,100 @@ namespace Elish
             geometry.geometryType = (VkGeometryTypeKHR)rhi_geometry.geometryType;
             geometry.flags = (VkGeometryFlagsKHR)rhi_geometry.flags;
             
+            VkAccelerationStructureBuildRangeInfoKHR build_range{};
+            build_range.primitiveOffset = 0;
+            build_range.firstVertex = 0;
+            build_range.transformOffset = 0;
+            
             if (rhi_geometry.geometryType == RHI_GEOMETRY_TYPE_TRIANGLES_KHR)
             {
+                if (!rhi_geometry.geometry.triangles)
+                {
+                    LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid triangles geometry data!");
+                    return false;
+                }
+                
                 geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-                geometry.geometry.triangles.vertexData.deviceAddress = rhi_geometry.triangles.vertexData.deviceAddress;
-                geometry.geometry.triangles.vertexStride = rhi_geometry.triangles.vertexStride;
-                geometry.geometry.triangles.vertexFormat = (VkFormat)rhi_geometry.triangles.vertexFormat;
-                geometry.geometry.triangles.indexData.deviceAddress = rhi_geometry.triangles.indexData.deviceAddress;
-                geometry.geometry.triangles.indexType = (VkIndexType)rhi_geometry.triangles.indexType;
+                geometry.geometry.triangles.pNext = nullptr;
+                geometry.geometry.triangles.vertexData.deviceAddress = rhi_geometry.geometry.triangles->vertexData.deviceAddress;
+                geometry.geometry.triangles.vertexStride = rhi_geometry.geometry.triangles->vertexStride;
+                geometry.geometry.triangles.maxVertex = rhi_geometry.geometry.triangles->maxVertex;
+                geometry.geometry.triangles.vertexFormat = (VkFormat)rhi_geometry.geometry.triangles->vertexFormat;
+                geometry.geometry.triangles.indexData.deviceAddress = rhi_geometry.geometry.triangles->indexData.deviceAddress;
+                geometry.geometry.triangles.indexType = (VkIndexType)rhi_geometry.geometry.triangles->indexType;
+                geometry.geometry.triangles.transformData.deviceAddress = rhi_geometry.geometry.triangles->transformData.deviceAddress;
+                
+                // 验证设备地址
+                if (geometry.geometry.triangles.vertexData.deviceAddress == 0)
+                {
+                    LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid vertex buffer device address!");
+                    return false;
+                }
+                
+                if (geometry.geometry.triangles.indexData.deviceAddress == 0)
+                {
+                    LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid index buffer device address!");
+                    return false;
+                }
+                
+                // 使用传入的图元数量
+                build_range.primitiveCount = rhi_geometry.primitiveCount;
+                
+                LOG_INFO("[VulkanRHI::buildAccelerationStructure] Setting primitive count: {}", build_range.primitiveCount);
+            }
+            else if (rhi_geometry.geometryType == RHI_GEOMETRY_TYPE_INSTANCES_KHR)
+            {
+                if (!rhi_geometry.geometry.instances)
+                {
+                    LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid instances geometry data!");
+                    return false;
+                }
+                
+                geometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+                geometry.geometry.instances.pNext = nullptr;
+                geometry.geometry.instances.arrayOfPointers = rhi_geometry.geometry.instances->arrayOfPointers;
+                geometry.geometry.instances.data.deviceAddress = rhi_geometry.geometry.instances->data.deviceAddress;
+                
+                if (geometry.geometry.instances.data.deviceAddress == 0)
+                {
+                    LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid instances buffer device address!");
+                    return false;
+                }
+                
+                // 对于实例几何，primitiveCount表示实例数量
+                build_range.primitiveCount = rhi_geometry.primitiveCount;
+                
+                LOG_INFO("[VulkanRHI::buildAccelerationStructure] Setting instance count: {}", build_range.primitiveCount);
+            }
+            else if (rhi_geometry.geometryType == RHI_GEOMETRY_TYPE_AABBS_KHR)
+            {
+                if (!rhi_geometry.geometry.aabbs)
+                {
+                    LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid AABBs geometry data!");
+                    return false;
+                }
+                
+                geometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+                geometry.geometry.aabbs.pNext = nullptr;
+                geometry.geometry.aabbs.data.deviceAddress = rhi_geometry.geometry.aabbs->data.deviceAddress;
+                geometry.geometry.aabbs.stride = rhi_geometry.geometry.aabbs->stride;
+                
+                if (geometry.geometry.aabbs.data.deviceAddress == 0)
+                {
+                    LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Invalid AABBs buffer device address!");
+                    return false;
+                }
+                
+                // 对于AABB几何，需要从外部传入AABB数量
+                build_range.primitiveCount = 1; // 默认为1个AABB，实际应该从外部传入
+            }
+            else
+            {
+                LOG_ERROR("[VulkanRHI::buildAccelerationStructure] Unsupported geometry type: {}", (int)rhi_geometry.geometryType);
+                return false;
             }
             
             geometries.push_back(geometry);
-            
-            VkAccelerationStructureBuildRangeInfoKHR build_range{};
-            build_range.primitiveCount = 1; // 默认值，需要根据实际几何数据设置
-            build_range.primitiveOffset = 0; // 默认值
-            build_range.firstVertex = 0; // 默认值
-            build_range.transformOffset = 0; // 默认值
             build_ranges.push_back(build_range);
         }
         
@@ -2066,6 +2321,10 @@ namespace Elish
         
         // 构建加速结构
         const VkAccelerationStructureBuildRangeInfoKHR* build_range_infos = build_ranges.data();
+        
+        std::cout << "[VulkanRHI::buildAccelerationStructure] Building acceleration structure with " << geometries.size() << " geometries" << std::endl;
+        std::cout << "[VulkanRHI::buildAccelerationStructure] Scratch buffer address: 0x" << std::hex << pBuildInfo->scratchData.deviceAddress << std::dec << std::endl;
+        
         _vkCmdBuildAccelerationStructuresKHR(
             ((VulkanCommandBuffer*)commandBuffer)->getResource(),
             1,
@@ -2073,6 +2332,7 @@ namespace Elish
             &build_range_infos
         );
         
+        std::cout << "[VulkanRHI::buildAccelerationStructure] Acceleration structure build command recorded successfully" << std::endl;
         return true;
     }
 
@@ -2097,6 +2357,89 @@ namespace Elish
         VkDeviceAddress device_address = _vkGetAccelerationStructureDeviceAddressKHR(m_device, &address_info);
         
         *pAddress = static_cast<RHIDeviceAddress>(device_address);
+    }
+
+    /**
+     * @brief 获取加速结构构建大小信息
+     * @param pBuildInfo 加速结构构建几何信息
+     * @param pMaxPrimitiveCounts 最大图元数量数组
+     * @param pSizeInfo 输出的大小信息
+     */
+    void VulkanRHI::getAccelerationStructureBuildSizes(const RHIAccelerationStructureBuildGeometryInfoKHR* pBuildInfo, const uint32_t* pMaxPrimitiveCounts, RHIAccelerationStructureBuildSizesInfoKHR* pSizeInfo)
+    {
+        if (!pBuildInfo || !pMaxPrimitiveCounts || !pSizeInfo || !_vkGetAccelerationStructureBuildSizesKHR)
+        {
+            LOG_ERROR("Invalid parameters or ray tracing not supported!");
+            if (pSizeInfo) {
+                pSizeInfo->accelerationStructureSize = 0;
+                pSizeInfo->updateScratchSize = 0;
+                pSizeInfo->buildScratchSize = 0;
+            }
+            return;
+        }
+
+        // 转换RHI结构到Vulkan结构
+        VkAccelerationStructureBuildGeometryInfoKHR build_info{};
+        build_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+        build_info.type = (VkAccelerationStructureTypeKHR)pBuildInfo->type;
+        build_info.flags = (VkBuildAccelerationStructureFlagsKHR)pBuildInfo->flags;
+        build_info.mode = (VkBuildAccelerationStructureModeKHR)pBuildInfo->mode;
+        build_info.srcAccelerationStructure = pBuildInfo->srcAccelerationStructure ? 
+            ((VulkanAccelerationStructure*)pBuildInfo->srcAccelerationStructure)->getResource() : VK_NULL_HANDLE;
+        build_info.dstAccelerationStructure = pBuildInfo->dstAccelerationStructure ? 
+            ((VulkanAccelerationStructure*)pBuildInfo->dstAccelerationStructure)->getResource() : VK_NULL_HANDLE;
+        build_info.geometryCount = pBuildInfo->geometryCount;
+        
+        // 转换几何信息
+        std::vector<VkAccelerationStructureGeometryKHR> geometries;
+        if (pBuildInfo->pGeometries && pBuildInfo->geometryCount > 0) {
+            geometries.resize(pBuildInfo->geometryCount);
+            for (uint32_t i = 0; i < pBuildInfo->geometryCount; ++i) {
+                const auto& rhi_geometry = pBuildInfo->pGeometries[i];
+                auto& vk_geometry = geometries[i];
+                
+                vk_geometry.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+                vk_geometry.geometryType = (VkGeometryTypeKHR)rhi_geometry.geometryType;
+                vk_geometry.flags = (VkGeometryFlagsKHR)rhi_geometry.flags;
+                
+                if (rhi_geometry.geometryType == RHI_GEOMETRY_TYPE_TRIANGLES_KHR) {
+                    vk_geometry.geometry.triangles.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+                    vk_geometry.geometry.triangles.pNext = nullptr;
+                    vk_geometry.geometry.triangles.vertexData.deviceAddress = rhi_geometry.geometry.triangles->vertexData.deviceAddress;
+                    vk_geometry.geometry.triangles.vertexStride = rhi_geometry.geometry.triangles->vertexStride;
+                    vk_geometry.geometry.triangles.maxVertex = rhi_geometry.geometry.triangles->maxVertex;
+                    vk_geometry.geometry.triangles.vertexFormat = (VkFormat)rhi_geometry.geometry.triangles->vertexFormat;
+                    vk_geometry.geometry.triangles.indexData.deviceAddress = rhi_geometry.geometry.triangles->indexData.deviceAddress;
+                    vk_geometry.geometry.triangles.indexType = (VkIndexType)rhi_geometry.geometry.triangles->indexType;
+                    vk_geometry.geometry.triangles.transformData.deviceAddress = rhi_geometry.geometry.triangles->transformData.deviceAddress;
+                }
+                else if (rhi_geometry.geometryType == RHI_GEOMETRY_TYPE_INSTANCES_KHR) {
+                    vk_geometry.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+                    vk_geometry.geometry.instances.pNext = nullptr;
+                    vk_geometry.geometry.instances.arrayOfPointers = rhi_geometry.geometry.instances->arrayOfPointers;
+                    vk_geometry.geometry.instances.data.deviceAddress = rhi_geometry.geometry.instances->data.deviceAddress;
+                }
+                else if (rhi_geometry.geometryType == RHI_GEOMETRY_TYPE_AABBS_KHR) {
+                    vk_geometry.geometry.aabbs.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+                    vk_geometry.geometry.aabbs.pNext = nullptr;
+                    vk_geometry.geometry.aabbs.data.deviceAddress = rhi_geometry.geometry.aabbs->data.deviceAddress;
+                    vk_geometry.geometry.aabbs.stride = rhi_geometry.geometry.aabbs->stride;
+                }
+            }
+            build_info.pGeometries = geometries.data();
+        }
+        
+        VkAccelerationStructureBuildSizesInfoKHR size_info{};
+        size_info.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+        
+        _vkGetAccelerationStructureBuildSizesKHR(m_device, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &build_info, pMaxPrimitiveCounts, &size_info);
+        
+        // 转换结果
+        pSizeInfo->sType = RHI_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+        pSizeInfo->pNext = nullptr;
+        pSizeInfo->accelerationStructureSize = size_info.accelerationStructureSize;
+        pSizeInfo->updateScratchSize = size_info.updateScratchSize;
+        pSizeInfo->buildScratchSize = size_info.buildScratchSize;
     }
 
     /**
@@ -2127,9 +2470,12 @@ namespace Elish
         // 计算着色器绑定表大小
         uint32_t handle_size = rt_props.shaderGroupHandleSize;
         uint32_t handle_alignment = rt_props.shaderGroupHandleAlignment;
+        uint32_t base_alignment = rt_props.shaderGroupBaseAlignment;
         uint32_t group_count = pCreateInfo->raygenShaderCount + pCreateInfo->missShaderCount + pCreateInfo->hitShaderCount;
         
-        uint32_t sbt_size = group_count * handle_size;
+        // 计算对齐后的句柄大小
+        uint32_t aligned_handle_size = (handle_size + base_alignment - 1) & ~(base_alignment - 1);
+        uint32_t sbt_size = group_count * aligned_handle_size;
         
         // 获取着色器组句柄
         std::vector<uint8_t> shader_handles(sbt_size);
@@ -2173,14 +2519,23 @@ namespace Elish
         
         // 复制着色器句柄数据到缓冲区
         void* mapped_data;
-        if (mapMemory((RHIDeviceMemory*)allocation_info.deviceMemory, 0, sbt_size, 0, &mapped_data))
+        VkResult map_result = vmaMapMemory(m_assets_allocator, allocation, &mapped_data);
+        if (map_result == VK_SUCCESS)
         {
-            memcpy(mapped_data, shader_handles.data(), sbt_size);
-            unmapMemory((RHIDeviceMemory*)allocation_info.deviceMemory);
+            // 按对齐要求复制每个着色器组句柄
+            uint8_t* dst_ptr = static_cast<uint8_t*>(mapped_data);
+            uint8_t* src_ptr = shader_handles.data();
+            
+            for (uint32_t i = 0; i < group_count; ++i)
+            {
+                memcpy(dst_ptr + i * aligned_handle_size, src_ptr + i * handle_size, handle_size);
+            }
+            
+            vmaUnmapMemory(m_assets_allocator, allocation);
         }
         else
         {
-            LOG_ERROR("Failed to map shader binding table buffer memory!");
+            LOG_ERROR("Failed to map shader binding table buffer memory! VkResult: {}", map_result);
             return false;
         }
         
@@ -3423,6 +3778,12 @@ namespace Elish
 
     void VulkanRHI::cmdCopyImageToImage(RHICommandBuffer* commandBuffer, RHIImage* srcImage, RHIImageAspectFlagBits srcFlag, RHIImage* dstImage, RHIImageAspectFlagBits dstFlag, uint32_t width, uint32_t height)
     {
+        // 调用带布局参数的重载函数，使用默认的传输布局
+        cmdCopyImageToImage(commandBuffer, srcImage, RHI_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, srcFlag, dstImage, RHI_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, dstFlag, width, height);
+    }
+
+    void VulkanRHI::cmdCopyImageToImage(RHICommandBuffer* commandBuffer, RHIImage* srcImage, RHIImageLayout srcLayout, RHIImageAspectFlagBits srcFlag, RHIImage* dstImage, RHIImageLayout dstLayout, RHIImageAspectFlagBits dstFlag, uint32_t width, uint32_t height)
+    {
         VkImageCopy imagecopyRegion = {};
         imagecopyRegion.srcSubresource = { (VkImageAspectFlags)srcFlag, 0, 0, 1 };
         imagecopyRegion.srcOffset = { 0, 0, 0 };
@@ -3432,9 +3793,9 @@ namespace Elish
 
         vkCmdCopyImage(((VulkanCommandBuffer*)commandBuffer)->getResource(),
             ((VulkanImage*)srcImage)->getResource(),
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            (VkImageLayout)srcLayout,
             ((VulkanImage*)dstImage)->getResource(),
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            (VkImageLayout)dstLayout,
             1,
             &imagecopyRegion);
     }
@@ -3446,11 +3807,16 @@ namespace Elish
         copyRegion.dstOffset = pRegions->dstOffset;
         copyRegion.size = pRegions->size;
 
+        LOG_INFO("[VulkanRHI] Starting buffer copy operation - Size: {} bytes, SrcOffset: {}, DstOffset: {}", 
+                 copyRegion.size, copyRegion.srcOffset, copyRegion.dstOffset);
+
         vkCmdCopyBuffer(((VulkanCommandBuffer*)commandBuffer)->getResource(),
             ((VulkanBuffer*)srcBuffer)->getResource(),
             ((VulkanBuffer*)dstBuffer)->getResource(),
             regionCount,
             &copyRegion);
+
+        LOG_INFO("[VulkanRHI] Buffer copy command recorded successfully");
     }
 
     void VulkanRHI::createCommandBuffers()
@@ -3480,7 +3846,7 @@ namespace Elish
         // should be big enough, and thus we can sub-allocate DescriptorSet from
         // DescriptorPool merely as we sub-allocate Buffer/Image from DeviceMemory.
 
-        VkDescriptorPoolSize pool_sizes[7];
+        VkDescriptorPoolSize pool_sizes[8];
         pool_sizes[0].type            = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
         pool_sizes[0].descriptorCount = 3 + 2 + 2 + 2 + 1 + 1 + 3 + 3;
         pool_sizes[1].type            = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -3495,6 +3861,8 @@ namespace Elish
         pool_sizes[5].descriptorCount = 3;
         pool_sizes[6].type            = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         pool_sizes[6].descriptorCount = 1;
+        pool_sizes[7].type            = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+        pool_sizes[7].descriptorCount = 2; // 支持光线追踪加速结构描述符
 
         VkDescriptorPoolCreateInfo pool_info {};
         pool_info.sType         = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -3681,14 +4049,36 @@ namespace Elish
             pAllocation,
             pAllocationInfo);
 
-        ((VulkanBuffer*)pBuffer)->setResource(vk_buffer);
-
         if (result == VK_SUCCESS)
         {
+            ((VulkanBuffer*)pBuffer)->setResource(vk_buffer);
             return true;
         }
         else
         {
+            // 记录VMA错误的详细信息
+            const char* errorString = "Unknown VMA error";
+            switch (result) {
+                case VK_ERROR_OUT_OF_HOST_MEMORY: errorString = "VK_ERROR_OUT_OF_HOST_MEMORY"; break;
+                case VK_ERROR_OUT_OF_DEVICE_MEMORY: errorString = "VK_ERROR_OUT_OF_DEVICE_MEMORY"; break;
+                case VK_ERROR_INITIALIZATION_FAILED: errorString = "VK_ERROR_INITIALIZATION_FAILED"; break;
+                case VK_ERROR_DEVICE_LOST: errorString = "VK_ERROR_DEVICE_LOST"; break;
+                case VK_ERROR_MEMORY_MAP_FAILED: errorString = "VK_ERROR_MEMORY_MAP_FAILED"; break;
+                case VK_ERROR_LAYER_NOT_PRESENT: errorString = "VK_ERROR_LAYER_NOT_PRESENT"; break;
+                case VK_ERROR_EXTENSION_NOT_PRESENT: errorString = "VK_ERROR_EXTENSION_NOT_PRESENT"; break;
+                case VK_ERROR_FEATURE_NOT_PRESENT: errorString = "VK_ERROR_FEATURE_NOT_PRESENT"; break;
+                case VK_ERROR_INCOMPATIBLE_DRIVER: errorString = "VK_ERROR_INCOMPATIBLE_DRIVER"; break;
+                case VK_ERROR_TOO_MANY_OBJECTS: errorString = "VK_ERROR_TOO_MANY_OBJECTS"; break;
+                case VK_ERROR_FORMAT_NOT_SUPPORTED: errorString = "VK_ERROR_FORMAT_NOT_SUPPORTED"; break;
+                case VK_ERROR_FRAGMENTED_POOL: errorString = "VK_ERROR_FRAGMENTED_POOL"; break;
+                case VK_ERROR_UNKNOWN: errorString = "VK_ERROR_UNKNOWN"; break;
+                default: errorString = "Unknown VkResult"; break;
+            }
+            std::cout << "[VulkanRHI::createBufferVMA] vmaCreateBuffer failed with error: " << errorString << " (" << result << ")" << std::endl;
+            std::cout << "[VulkanRHI::createBufferVMA] Buffer size: " << buffer_create_info.size << ", usage: " << buffer_create_info.usage << std::endl;
+            
+            delete pBuffer;
+            pBuffer = nullptr;
             return false;
         }
     }
@@ -3825,6 +4215,7 @@ namespace Elish
         vulkanFunctions.vkGetDeviceProcAddr   = &vkGetDeviceProcAddr;
 
         VmaAllocatorCreateInfo allocatorCreateInfo = {};
+        allocatorCreateInfo.flags                  = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
         allocatorCreateInfo.vulkanApiVersion       = m_vulkan_api_version;
         allocatorCreateInfo.physicalDevice         = m_physical_device;
         allocatorCreateInfo.device                 = m_device;
@@ -3932,7 +4323,7 @@ namespace Elish
         createInfo.imageColorSpace  = chosen_surface_format.colorSpace;
         createInfo.imageExtent      = chosen_extent;
         createInfo.imageArrayLayers = 1;
-        createInfo.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+        createInfo.imageUsage       = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
         uint32_t queueFamilyIndices[] = {m_queue_indices.graphics_family.value(), m_queue_indices.present_family.value()};
 
@@ -4063,6 +4454,24 @@ namespace Elish
     {
         vkDestroyBuffer(m_device, ((VulkanBuffer*)buffer)->getResource(), nullptr);
         RHI_DELETE_PTR(buffer);
+    }
+
+    void VulkanRHI::destroyPipeline(RHIPipeline* pipeline)
+    {
+        if (pipeline)
+        {
+            vkDestroyPipeline(m_device, ((VulkanPipeline*)pipeline)->getResource(), nullptr);
+            delete pipeline;
+        }
+    }
+
+    void VulkanRHI::destroyPipelineLayout(RHIPipelineLayout* pipelineLayout)
+    {
+        if (pipelineLayout)
+        {
+            vkDestroyPipelineLayout(m_device, ((VulkanPipelineLayout*)pipelineLayout)->getResource(), nullptr);
+            delete pipelineLayout;
+        }
     }
 
     void VulkanRHI::freeCommandBuffers(RHICommandPool* commandPool, uint32_t commandBufferCount, RHICommandBuffer* pCommandBuffers)
@@ -4478,6 +4887,12 @@ namespace Elish
      */
     uint32_t VulkanRHI::getRayTracingShaderGroupHandleSize()
     {
+        if (!m_ray_tracing_supported)
+        {
+            LOG_WARN("Ray tracing not supported, returning default handle size");
+            return 0;
+        }
+        
         VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_props{};
         rt_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
         
@@ -4495,6 +4910,12 @@ namespace Elish
      */
     uint32_t VulkanRHI::getRayTracingShaderGroupBaseAlignment()
     {
+        if (!m_ray_tracing_supported)
+        {
+            LOG_WARN("Ray tracing not supported, returning default base alignment");
+            return 1;
+        }
+        
         VkPhysicalDeviceRayTracingPipelinePropertiesKHR rt_props{};
         rt_props.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
         
@@ -4517,6 +4938,12 @@ namespace Elish
      */
     RHIResult VulkanRHI::getRayTracingShaderGroupHandlesKHR(RHIPipeline* pipeline, uint32_t firstGroup, uint32_t groupCount, size_t dataSize, void* pData)
     {
+        if (!m_ray_tracing_supported)
+        {
+            LOG_WARN("Ray tracing not supported, cannot get shader group handles");
+            return RHI_FALSE;
+        }
+        
         if (!pipeline || !pData || !_vkGetRayTracingShaderGroupHandlesKHR)
         {
             LOG_ERROR("Invalid parameters or ray tracing not supported!");
@@ -4544,6 +4971,12 @@ namespace Elish
      */
     RHIResult VulkanRHI::createRayTracingPipelinesKHR(uint32_t create_info_count, const RHIRayTracingPipelineCreateInfo* create_infos, RHIPipeline*& pipelines)
     {
+        if (!m_ray_tracing_supported)
+        {
+            LOG_WARN("Ray tracing not supported, cannot create ray tracing pipelines");
+            return RHI_FALSE;
+        }
+        
         if (!create_infos || create_info_count == 0 || !_vkCreateRayTracingPipelinesKHR)
         {
             LOG_ERROR("Invalid parameters or ray tracing not supported!");
@@ -4666,6 +5099,9 @@ namespace Elish
         allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         allocInfo.allocationSize = pAllocateInfo->allocationSize;
         allocInfo.memoryTypeIndex = pAllocateInfo->memoryTypeIndex;
+        
+        // 直接传递pNext链，因为在vulkan_util.cpp中已经正确设置了Vulkan原生结构体
+        allocInfo.pNext = pAllocateInfo->pNext;
 
         VkDeviceMemory vk_memory;
         VkResult result = vkAllocateMemory(m_device, &allocInfo, nullptr, &vk_memory);
@@ -4797,6 +5233,53 @@ namespace Elish
         address_info.buffer = ((VulkanBuffer*)buffer)->getResource();
         
         return vkGetBufferDeviceAddress(m_device, &address_info);
+    }
+
+    /**
+     * @brief 检查光线追踪硬件兼容性
+     * @return 是否支持光线追踪
+     */
+    bool VulkanRHI::checkRayTracingCompatibility()
+    {
+        // 检查光线追踪管线特性
+        bool rt_pipeline_supported = m_rt_pipeline_features.rayTracingPipeline == VK_TRUE;
+        
+        // 检查加速结构特性
+        bool as_supported = m_as_features.accelerationStructure == VK_TRUE;
+        
+        // 检查缓冲区设备地址特性（光线追踪必需）
+        bool buffer_device_address_supported = m_buffer_device_address_features.bufferDeviceAddress == VK_TRUE;
+        
+        // 记录详细的光线追踪支持信息
+        LOG_INFO("Ray Tracing Compatibility Check:");
+        LOG_INFO("  Ray Tracing Pipeline: {}", rt_pipeline_supported ? "Supported" : "Not Supported");
+        LOG_INFO("  Acceleration Structure: {}", as_supported ? "Supported" : "Not Supported");
+        LOG_INFO("  Buffer Device Address: {}", buffer_device_address_supported ? "Supported" : "Not Supported");
+        
+        // 记录光线追踪管线属性
+        LOG_INFO("Ray Tracing Pipeline Properties:");
+        LOG_INFO("  Shader Group Handle Size: {}", m_rt_pipeline_properties.shaderGroupHandleSize);
+        LOG_INFO("  Max Ray Recursion Depth: {}", m_rt_pipeline_properties.maxRayRecursionDepth);
+        LOG_INFO("  Max Shader Group Stride: {}", m_rt_pipeline_properties.maxShaderGroupStride);
+        LOG_INFO("  Shader Group Base Alignment: {}", m_rt_pipeline_properties.shaderGroupBaseAlignment);
+        
+        // 记录加速结构属性
+        LOG_INFO("Acceleration Structure Properties:");
+        LOG_INFO("  Max Geometry Count: {}", m_as_properties.maxGeometryCount);
+        LOG_INFO("  Max Instance Count: {}", m_as_properties.maxInstanceCount);
+        LOG_INFO("  Max Primitive Count: {}", m_as_properties.maxPrimitiveCount);
+        LOG_INFO("  Max Descriptor Set AS: {}", m_as_properties.maxDescriptorSetAccelerationStructures);
+        
+        // 所有必需特性都支持才返回true
+        bool is_supported = rt_pipeline_supported && as_supported && buffer_device_address_supported;
+        
+        if (is_supported) {
+            LOG_INFO("Ray Tracing is fully supported on this device! 🚀");
+        } else {
+            LOG_WARN("Ray Tracing is not fully supported on this device ⚠️");
+        }
+        
+        return is_supported;
     }
 
 } // namespace Elish

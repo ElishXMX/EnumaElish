@@ -68,16 +68,25 @@
         {
             "name": "ground_plane",
             "type": "plane",
+            "model_path": "engine/runtime/content/models/platform.obj",
             "transform": {
                 "position": [0.0, -1.0, 0.0],
                 "rotation": [0.0, 0.0, 0.0],
-                "scale": [20.0, 1.0, 20.0]
+                "scale": [1.0, 1.0, 1.0]
             },
             "material": "marble"
         },
         {
-            "name": "chrome_sphere",
-            "type": "sphere",
+            "name": "chrome_shield",
+            "type": "shield",
+            "model_path": "engine/runtime/content/models/hylian_shield.obj",
+            "textures": [
+                "engine/runtime/content/textures/hylian_shield_c.png",
+                "engine/runtime/content/textures/hylian_shield_m.png",
+                "engine/runtime/content/textures/hylian_shield_r.png",
+                "engine/runtime/content/textures/hylian_shield_n.png",
+                "engine/runtime/content/textures/hylian_shield_o.png"
+            ],
             "transform": {
                 "position": [-2.0, 0.5, 0.0],
                 "rotation": [0.0, 0.0, 0.0],

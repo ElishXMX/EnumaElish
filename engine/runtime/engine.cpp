@@ -22,7 +22,7 @@ namespace Elish
         while (!window_system->shouldClose())
         {
             const float delta_time = calculateDeltaTime();//计算下一帧
-            // Sleep(10000 / 60); //使用Windows API的Sleep函数来控制帧率
+            // Sleep(1000 / 60); //使用Windows API的Sleep函数来控制帧率 - 修复：应该是1000/60而不是10000/60
             tickOneFrame(delta_time);//窗口启动后继续
      }
     }
@@ -43,33 +43,64 @@ namespace Elish
 
     bool Engine::tickOneFrame(float delta_time)
     {
+        // LOG_DEBUG("[Engine] Starting tickOneFrame");
         logicalTick(delta_time);//逻辑更新
+        // LOG_DEBUG("[Engine] logicalTick completed");
         calculateFPS(delta_time);//计算fps
+        // LOG_DEBUG("[Engine] calculateFPS completed");
 
         // single thread
         // exchange data between logic and render contexts
         // g_runtime_global_context.m_render_system->swapLogicRenderData();//交换数据
 
+        // 检查窗口系统是否有效
+        if (!g_runtime_global_context.m_window_system) {
+            LOG_FATAL("[Engine] Window system is null in tickOneFrame!");
+            return false;
+        }
+        
         g_runtime_global_context.m_window_system->pollEvents();
+        // LOG_DEBUG("[Engine] pollEvents completed");
+        
+        // 检查渲染系统是否有效
+        if (!g_runtime_global_context.m_render_system) {
+            LOG_FATAL("[Engine] Render system is null in tickOneFrame!");
+            return false;
+        }
+        
         rendererTick(delta_time);//渲染更新
+        // LOG_DEBUG("[Engine] rendererTick completed");
 
 
         g_runtime_global_context.m_window_system->setTitle(
             std::string("EummaElish Engine - " + std::to_string(getFPS()) + " FPS").c_str());
+        // LOG_DEBUG("[Engine] setTitle completed");
 
         const bool should_window_close = g_runtime_global_context.m_window_system->shouldClose();
+        // LOG_DEBUG("[Engine] tickOneFrame completed");
         return !should_window_close;
     }
 
     
     void Engine::logicalTick(float delta_time)
     {
+        // LOG_DEBUG("[Engine] Starting logicalTick");
+        
+        // 检查输入系统是否有效
+        if (!g_runtime_global_context.m_input_system) {
+            LOG_FATAL("[Engine] Input system is null in logicalTick!");
+            return;
+        }
+        
         g_runtime_global_context.m_input_system->tick();
+        // LOG_DEBUG("[Engine] logicalTick input system tick completed");
      }
 
     bool Engine::rendererTick(float delta_time)
     {
+        // LOG_DEBUG("[Engine] Starting rendererTick");
         g_runtime_global_context.m_render_system->tick(delta_time);
+        // LOG_DEBUG("[Engine] rendererTick completed");
         return true;
     }
 
