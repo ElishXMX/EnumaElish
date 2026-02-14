@@ -65,3 +65,52 @@ add_subdirectory(runtime)
 # 引擎入口点
 add_executable(EnumaElish main.cpp)
 target_link_libraries(EnumaElish PRIVATE EnumaElishRuntime)
+
+# ==============================================================================
+# 资产文件复制配置
+# 确保资产文件在编译后被复制到构建目录，支持多种运行场景
+# ==============================================================================
+
+# 定义资产源目录
+set(ASSET_SOURCE_DIR "${ENGINE_ROOT_DIR}/runtime/content")
+
+# 定义资产目标目录（相对于构建目录）
+set(ASSET_TARGET_DIR "${CMAKE_BINARY_DIR}/content")
+
+# 定义要复制的资产子目录
+set(ASSET_SUBDIRS "models" "textures" "levels")
+
+# 创建资产复制目标
+add_custom_target(CopyAssets ALL
+    COMMENT "Copying asset files to build directory..."
+)
+
+# 为每个资产子目录创建复制规则
+foreach(SUBDIR ${ASSET_SUBDIRS})
+    set(SOURCE_SUBDIR "${ASSET_SOURCE_DIR}/${SUBDIR}")
+    set(TARGET_SUBDIR "${ASSET_TARGET_DIR}/${SUBDIR}")
+    
+    # 检查源目录是否存在
+    if(EXISTS "${SOURCE_SUBDIR}")
+        # 添加复制命令
+        add_custom_command(TARGET CopyAssets POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${TARGET_SUBDIR}"
+            COMMAND ${CMAKE_COMMAND} -E copy_directory "${SOURCE_SUBDIR}" "${TARGET_SUBDIR}"
+            COMMENT "Copying ${SUBDIR} to ${TARGET_SUBDIR}"
+        )
+        message(STATUS "Asset copy configured: ${SOURCE_SUBDIR} -> ${TARGET_SUBDIR}")
+    else()
+        message(WARNING "Asset source directory not found: ${SOURCE_SUBDIR}")
+    endif()
+endforeach()
+
+# 确保EnumaElish依赖于CopyAssets，这样编译后会自动复制资产
+add_dependencies(EnumaElish CopyAssets)
+
+# 同时复制到可执行文件所在目录（支持直接点击exe运行）
+# 这是为了支持从 build-ninja/engine/EnumaElish.exe 直接运行
+add_custom_command(TARGET EnumaElish POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/engine/content"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${ASSET_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/engine/content"
+    COMMENT "Copying assets to executable directory for direct execution"
+)

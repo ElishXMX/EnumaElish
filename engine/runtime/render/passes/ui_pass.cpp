@@ -3,6 +3,8 @@
 #include "../interface/vulkan/vulkan_rhi_resource.h"
 #include "../../core/base/macro.h"
 #include "../../core/log/log_system.h"
+#include "../../core/asset/asset_manager.h"
+#include "../../ui/asset_browser_ui.h"
 #include "../../global/global_context.h"
 #include "../window_system.h"
 #include "../render_pipeline.h"
@@ -1127,60 +1129,17 @@ namespace Elish
             
             // 资产内容
             ImGui::SetCursorPosY(10.0f); // Move down past splitter
-            ImGui::Text("📂 Asset Browser");
-            ImGui::SameLine();
-            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "(Drag top edge to resize)");
             
-            ImGui::Separator();
-            
-            // 简单的标签页
-            static int selected_tab = 0;
-            if (ImGui::Button("Models")) selected_tab = 0;
-            ImGui::SameLine();
-            if (ImGui::Button("Materials")) selected_tab = 1;
-            ImGui::SameLine();
-            if (ImGui::Button("Textures")) selected_tab = 2;
-             ImGui::SameLine();
-            if (ImGui::Button("Shaders")) selected_tab = 3;
-            
-            ImGui::Spacing();
-            
-            if (selected_tab == 0)
+            // 初始化资产浏览器（如果需要）
+            static bool assetBrowserInitialized = false;
+            if (!assetBrowserInitialized && m_rhi)
             {
-                // 显示模型列表（简单示例）
-                if (ImGui::BeginChild("AssetList", ImVec2(0, 0), true))
-                {
-                    // 简单的网格布局
-                    float item_size = 90.0f;
-                    float window_visible_x = ImGui::GetContentRegionAvail().x;
-                    int columns = std::max(1, (int)(window_visible_x / (item_size + 10.0f)));
-                    
-                    for (int i = 0; i < 15; ++i)
-                    {
-                        ImGui::PushID(i);
-                        if (i % columns != 0) ImGui::SameLine();
-                        
-                        ImGui::BeginGroup();
-                        // 占位图标
-                        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.3f, 0.35f, 1.0f));
-                        ImGui::Button("##Icon", ImVec2(item_size, item_size * 0.8f));
-                        ImGui::PopStyleColor();
-                        
-                        // 文本截断
-                        char label[32];
-                        sprintf(label, "Model_%02d", i);
-                        ImGui::Text("%s", label);
-                        ImGui::EndGroup();
-                        
-                        ImGui::PopID();
-                    }
-                }
-                ImGui::EndChild();
+                AssetBrowserUI::getInstance().initialize(m_rhi);
+                assetBrowserInitialized = true;
             }
-            else
-            {
-                 ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No items in this category");
-            }
+            
+            // 渲染真实的资产浏览器
+            AssetBrowserUI::getInstance().render();
             
             ImGui::End();
         }

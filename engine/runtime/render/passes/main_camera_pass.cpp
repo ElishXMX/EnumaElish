@@ -1,6 +1,7 @@
 #include "main_camera_pass.h"
 #include "directional_light_pass.h"
 #include "../../core/base/macro.h"
+#include "../../core/asset/asset_manager.h"
 #include "../../render/interface/rhi.h"
 #include "../../render/interface/vulkan/vulkan_rhi_resource.h"
 #include "../../render/interface/vulkan/vulkan_rhi.h"
@@ -1429,14 +1430,24 @@ namespace Elish
             createTextureSampler();		// 创建着色器中引用的贴图采样器
     }
     void MainCameraPass::createTextureImage(){		// 创建贴图资源
-        // 尝试从content/textures目录加载图片
-        std::string texturePath = "../engine/runtime/content/textures/background.png";
+        // 使用资产管理器解析纹理路径
+        std::string texturePath = AssetManager::getInstance().resolveAssetPath("textures/background.png");
+        
+        if (texturePath.empty()) {
+            LOG_WARN("Background texture not found, using default white texture");
+        } else {
+            LOG_DEBUG("Background texture resolved to: {}", texturePath);
+        }
         
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = nullptr;
+        
+        if (!texturePath.empty()) {
+            pixels = stbi_load(texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        }
         
         if (!pixels) {
-           LOG_ERROR("Failed to load texture: " + texturePath);
+           LOG_ERROR("Failed to load texture: {}", texturePath.empty() ? "textures/background.png" : texturePath);
            // 创建一个默认的1x1白色纹理
            texWidth = 1;
            texHeight = 1;

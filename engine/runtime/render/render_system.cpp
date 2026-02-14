@@ -1,6 +1,7 @@
 #include "render_system.h"
 #include "window_system.h"
 #include "../core/base/macro.h"
+#include "../core/asset/asset_manager.h"
 
 #include "interface/vulkan/vulkan_rhi.h"
 #include "render_pipeline.h"
@@ -31,6 +32,10 @@ namespace Elish
     {
         LOG_INFO("[RENDER_SYSTEM] ===== RenderSystem initialization started =====");
         
+        // 初始化资产管理器
+        AssetManager::getInstance().initialize();
+        LOG_INFO("[RENDER_SYSTEM] Asset Manager initialized: {}", AssetManager::getInstance().getAssetRoot());
+        
         //vulkan初始化
          // render context initialize
         LOG_INFO("[RENDER_SYSTEM] Step 1: Initializing Vulkan RHI");
@@ -53,37 +58,66 @@ namespace Elish
         std::unordered_map<std::string, std::vector<std::string>> model_texture_map;
         std::unordered_map<std::string, ModelAnimationParams> model_animation_params;
         
-        // 尝试从JSON文件加载资源配置
-        const std::string json_config_path = "../engine/runtime/content/levels/levels1.json";
+        // 使用资产管理器解析JSON配置文件路径
+        std::string json_config_path = AssetManager::getInstance().resolveAssetPath("levels/levels1.json");
+        if (json_config_path.empty())
+        {
+            // 尝试备选路径
+            json_config_path = AssetManager::getInstance().resolveAssetPathWithAlternatives(
+                "levels/levels1.json",
+                {
+                    "engine/runtime/content/levels/levels1.json",
+                    "runtime/content/levels/levels1.json"
+                }
+            );
+        }
+        
         LOG_INFO("[JSON_LOADER] ===== Starting JSON configuration loading =====");
-        LOG_INFO("[JSON_LOADER] Attempting to load JSON configuration from: {}", json_config_path);
-        LOG_INFO("[JSON_LOADER] Current working directory check...");
-        if (loadResourcesFromJson(json_config_path, model_paths, model_texture_map, model_animation_params)) {
-            LOG_INFO("[JSON_LOADER] Successfully loaded resources from JSON configuration: {}", json_config_path);
-            LOG_INFO("[JSON_LOADER] Loaded {} models from JSON", model_paths.size());
-            for (const auto& [name, path] : model_paths) {
-                LOG_INFO("[JSON_LOADER] Model: {} -> {}", name, path);
+        if (!json_config_path.empty()) {
+            LOG_INFO("[JSON_LOADER] Resolved JSON path: {}", json_config_path);
+            if (loadResourcesFromJson(json_config_path, model_paths, model_texture_map, model_animation_params)) {
+                LOG_INFO("[JSON_LOADER] Successfully loaded resources from JSON configuration");
+                LOG_INFO("[JSON_LOADER] Loaded {} models from JSON", model_paths.size());
+                for (const auto& [name, path] : model_paths) {
+                    LOG_INFO("[JSON_LOADER] Model: {} -> {}", name, path);
+                }
+            } else {
+                LOG_ERROR("[JSON_LOADER] Failed to load JSON configuration, using fallback hardcoded resources.");
+                LOG_ERROR("[JSON_LOADER] This will result in no models being loaded!");
             }
         } else {
-            // 如果JSON加载失败，使用硬编码的备用配置
-            LOG_ERROR("[JSON_LOADER] Failed to load JSON configuration, using fallback hardcoded resources.");
-            LOG_ERROR("[JSON_LOADER] This will result in no models being loaded!");
+            LOG_ERROR("[JSON_LOADER] Could not find levels1.json configuration file!");
+            LOG_ERROR("[JSON_LOADER] Asset root: {}", AssetManager::getInstance().getAssetRoot());
         }
 
         loadContentResources(model_paths, model_texture_map, model_animation_params);
         
 
-        // load cubemap
+        // load cubemap - 使用资产管理器解析路径
         LOG_INFO("[Skybox] Initializing cubemap resources for skybox rendering");
         std::array<std::string, 6> cubemapFiles = {
-            "engine/content/textures/cubemap_X0.png",
-            "engine/content/textures/cubemap_X1.png",
-            "engine/content/textures/cubemap_Y2.png",
-            "engine/content/textures/cubemap_Y3.png",
-            "engine/content/textures/cubemap_Z4.png",
-            "engine/content/textures/cubemap_Z5.png",
+            AssetManager::getInstance().resolveAssetPath("textures/cubemap_X0.png"),
+            AssetManager::getInstance().resolveAssetPath("textures/cubemap_X1.png"),
+            AssetManager::getInstance().resolveAssetPath("textures/cubemap_Y2.png"),
+            AssetManager::getInstance().resolveAssetPath("textures/cubemap_Y3.png"),
+            AssetManager::getInstance().resolveAssetPath("textures/cubemap_Z4.png"),
+            AssetManager::getInstance().resolveAssetPath("textures/cubemap_Z5.png"),
         };
-        bool cubemapLoadSuccess = m_render_resource->loadCubemapTexture(cubemapFiles);
+        
+        // 检查cubemap文件是否都找到了
+        bool allCubemapFilesFound = true;
+        for (size_t i = 0; i < cubemapFiles.size(); ++i) {
+            if (cubemapFiles[i].empty()) {
+                LOG_ERROR("[Skybox] Cubemap face {} not found!", i);
+                allCubemapFilesFound = false;
+            }
+        }
+        
+        bool cubemapLoadSuccess = false;
+        if (allCubemapFilesFound) {
+            cubemapLoadSuccess = m_render_resource->loadCubemapTexture(cubemapFiles);
+        }
+        
         if (cubemapLoadSuccess) {
             LOG_INFO("[Skybox] Cubemap resources initialized successfully");
         } else {
@@ -151,42 +185,53 @@ namespace Elish
             const std::string& modelName = pair.first;
             const std::string& objPath = pair.second;
             
-            // 调整模型文件路径，相对于build-ninja目录
-            std::string adjustedObjPath = "../" + objPath;
+            // 使用资产管理器解析模型文件路径
+            std::string resolvedObjPath = AssetManager::getInstance().resolveAssetPath(objPath);
+            if (resolvedObjPath.empty())
+            {
+                // 尝试从 models 目录直接查找
+                std::filesystem::path modelFileName = std::filesystem::path(objPath).filename();
+                resolvedObjPath = AssetManager::getInstance().resolveAssetPath("models/" + modelFileName.string());
+            }
             
-            // Check if model file exists
-            std::filesystem::path modelFilePath(adjustedObjPath);
-            if (!std::filesystem::exists(modelFilePath)) {
-                LOG_ERROR("Model file does not exist: {}", adjustedObjPath);
-                LOG_ERROR("Absolute path: {}", std::filesystem::absolute(modelFilePath).string());
+            // 检查模型文件是否存在
+            if (resolvedObjPath.empty()) {
+                LOG_ERROR("Model file does not exist: {}", objPath);
+                LOG_ERROR("Asset root: {}", AssetManager::getInstance().getAssetRoot());
                 failedModels++;
                 continue;
-            } else {
-                // LOG_DEBUG("✓ Model file exists: {}", adjustedObjPath);
             }
+            
+            LOG_DEBUG("Model file resolved to: {}", resolvedObjPath);
             
             std::vector<std::string> textureFiles;
             if (model_texture_map.count(modelName)) {
-                // 调整纹理文件路径
+                // 使用资产管理器解析纹理文件路径
                 std::vector<std::string> originalTextures = model_texture_map.at(modelName);
                 textureFiles.clear();
                 for (const auto& texPath : originalTextures) {
-                    textureFiles.push_back("../" + texPath);
+                    std::string resolvedTexPath = AssetManager::getInstance().resolveAssetPath(texPath);
+                    if (resolvedTexPath.empty())
+                    {
+                        // 尝试从 textures 目录直接查找
+                        std::filesystem::path texFileName = std::filesystem::path(texPath).filename();
+                        resolvedTexPath = AssetManager::getInstance().resolveAssetPath("textures/" + texFileName.string());
+                    }
+                    
+                    if (!resolvedTexPath.empty()) {
+                        textureFiles.push_back(resolvedTexPath);
+                    } else {
+                        LOG_ERROR("Texture file not found: {}", texPath);
+                    }
                 }
                 
-                
-                // Validate each texture file
+                // 验证纹理文件
                 int validTextures = 0;
                 for (size_t i = 0; i < textureFiles.size(); ++i) {
-                    const auto& texFile = textureFiles[i];
-                    std::filesystem::path texturePath(texFile);
-                    
-                    if (std::filesystem::exists(texturePath)) {
-                        // LOG_DEBUG("  ✓ Texture {}: {}", i + 1, texFile);
+                    if (std::filesystem::exists(textureFiles[i])) {
                         validTextures++;
                     } else {
-                        LOG_ERROR("  ✗ Texture {}: {} (FILE NOT FOUND)", i + 1, texFile);
-                        LOG_ERROR("    Absolute path: {}", std::filesystem::absolute(texturePath).string());
+                        LOG_ERROR("Texture file does not exist after resolution: {}", textureFiles[i]);
                     }
                 }
                 
@@ -203,7 +248,6 @@ namespace Elish
                 // 应用动画参数（从JSON加载或使用默认值）
                 if (model_animation_params.count(modelName)) {
                     renderObject.animationParams = model_animation_params.at(modelName);
-                    // LOG_DEBUG("Applied loaded animation params for model '{}'", modelName);
                 } else {
                     // 使用默认动画参数（初始状态保持静止）
                     renderObject.animationParams.position = glm::vec3(0.0f);
@@ -218,10 +262,9 @@ namespace Elish
                     if (renderObject.animationParams.isPlatform) {
                         renderObject.animationParams.enableAnimation = false; // 平台不启用动画
                     }
-                    // LOG_DEBUG("Applied default animation params for model '{}'", modelName);
                 }
                 
-                bool success = m_render_resource->createRenderObjectResource(renderObject, adjustedObjPath, textureFiles);
+                bool success = m_render_resource->createRenderObjectResource(renderObject, resolvedObjPath, textureFiles);
                 if (success) {
                     m_render_resource->addRenderObject(renderObject);
                     loadedModels++;
