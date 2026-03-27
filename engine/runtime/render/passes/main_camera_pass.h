@@ -32,7 +32,7 @@ namespace Elish
         void setupPipelines();
         void setupBackgroundDescriptorSet();
         void setupSkyboxDescriptorSet();  // 新增：天空盒描述符集设置
-        void setupModelDescriptorSet();
+        bool setupModelDescriptorSet();   // 返回是否成功
         void setupFramebufferDescriptorSet();
         void setupSwapchainFramebuffers();
 
@@ -70,10 +70,6 @@ namespace Elish
         // 旧的兼容性接口已移除，现在使用 RenderResource 管理光源
 
         
-
-    private:
-        // 帧缓冲相关
-        std::vector<RHIFramebuffer*> m_swapchain_framebuffers;
         
         // 相机系统
         std::shared_ptr<RenderCamera> m_camera;
@@ -154,10 +150,11 @@ namespace Elish
         std::vector<Descriptor> m_model_descriptor_infos;
         
         // 新增：存储加载的模型对象，避免重复获取
-        std::vector<RenderObject> m_loaded_render_objects;
+        std::vector<RenderObject> m_loaded_render_objects;  // 存储加载的渲染对象
+        bool m_model_descriptor_sets_initialized = false;   // 模型描述符集初始化标志
         
-        // 描述符集状态标志
-        bool m_model_descriptor_sets_initialized = false;
+        // 交换链帧缓冲区
+        std::vector<RHIFramebuffer*> m_swapchain_framebuffers;
         
         // 私有方法
         void setupBackgroundTexture();

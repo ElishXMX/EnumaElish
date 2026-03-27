@@ -9,7 +9,6 @@ namespace Elish
     class InputSystem;
     class RenderSystem;
     class WindowSystem;
-   
     /// Manage the lifetime and creation/destruction order of all global system
     class RuntimeGlobalContext
     {
@@ -25,6 +24,5 @@ namespace Elish
         std::shared_ptr<WindowSystem>      m_window_system;
         std::shared_ptr<RenderSystem>      m_render_system;
     };
-
     extern RuntimeGlobalContext g_runtime_global_context;//全局变量
 } // namespace Elish

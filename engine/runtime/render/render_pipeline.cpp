@@ -6,13 +6,11 @@
 #include "passes/directional_light_pass.h"
 #include "passes/raytracing_pass.h"
 #include "render_pass_base.h"
-#include "../core/base/macro.h"
 #include <iostream>
-
 
 namespace Elish
 {
-     // RT任务监控辅助方法实现
+    // RT任务监控辅助方法实现
     void RenderPipeline::RTTaskMonitor::begin()
     {
         running = true;
@@ -46,7 +44,11 @@ namespace Elish
     {
         return running && (now_ms - start_ms) > timeout_threshold_ms;
     }
-    void RenderPipeline::initialize() 
+
+    /**
+     * @brief 初始化渲染管线
+     */
+    void RenderPipeline::initialize()
     {
         RenderPassCommonInfo pass_common_info;
         pass_common_info.rhi = m_rhi;
@@ -63,7 +65,6 @@ namespace Elish
         m_main_camera_pass->setCommonInfo(pass_common_info);
         m_main_camera_pass->initialize();
         
-        // 设置MainCameraPass对DirectionalLightShadowPass的引用
         auto main_camera_pass = std::static_pointer_cast<MainCameraPass>(m_main_camera_pass);
         main_camera_pass->setDirectionalLightShadowPass(std::static_pointer_cast<DirectionalLightShadowPass>(m_directional_light_shadow_pass));
 
@@ -72,53 +73,59 @@ namespace Elish
         m_ui_pass->setCommonInfo(pass_common_info);
         m_ui_pass->initialize();
         
-        // 初始化光线追踪渲染通道
         LOG_DEBUG("[RenderPipeline] Creating ray tracing pass");
         m_raytracing_pass = std::make_shared<RayTracingPass>();
         LOG_DEBUG("[RenderPipeline] Setting common info for ray tracing pass");
         m_raytracing_pass->setCommonInfo(pass_common_info);
         
-        // 默认关闭光线追踪功能，等待修复 VK_ERROR_DEVICE_LOST 后再开启
-    // LOG_INFO("[RenderPipeline] Ray tracing is disabled by default (pending fix for VK_ERROR_DEVICE_LOST)");
-    m_raytracing_pass->setRayTracingEnabled(false);
+        // 光线追踪暂时禁用
+        m_raytracing_pass->setRayTracingEnabled(false);
 
         LOG_DEBUG("[RenderPipeline] Initializing ray tracing pass");
         m_raytracing_pass->initialize();
-        LOG_DEBUG("[RenderPipeline] Ray tracing pass initialization completed");
+        LOG_INFO("[RenderPipeline] Ray tracing pass initialization completed, enabled={}", m_raytracing_pass->isRayTracingEnabled());
     }
+
+    /**
+     * @brief 前向渲染
+     */
     void RenderPipeline::forwardRender(std::shared_ptr<RHI> rhi, std::shared_ptr<RenderResource> render_resource)
     {
-        // LOG_INFO("[RenderPipeline] Starting forwardRender - frame rendering begins");
+        VulkanRHI* vulkan_rhi = static_cast<VulkanRHI*>(rhi.get());
         
-        VulkanRHI*      vulkan_rhi      = static_cast<VulkanRHI*>(rhi.get());
-
-        // vulkan_resource->resetRingBufferOffset(vulkan_rhi->m_current_frame_index);
         vulkan_rhi->waitForFences();
-
         vulkan_rhi->resetCommandPool();
         
-        // 准备渲染上下文，设置当前命令缓冲区
+        // 🔧 确保场景中至少有一个方向光源（在所有Pass准备之前）
+        if (render_resource && render_resource->getDirectionalLightCount() == 0) {
+            // 创建默认方向光源
+            DirectionalLightData default_light;
+            default_light.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
+            default_light.intensity = 3.0f;
+            default_light.color = glm::vec3(1.0f, 1.0f, 1.0f);
+            default_light.enabled = true;
+            default_light.distance = 20.0f;
+            
+            render_resource->addDirectionalLight(default_light);
+            LOG_INFO("[RenderPipeline] Added default directional light to RenderResource");
+        }
         
-        // 准备Pass数据，包括模型数据和相机矩阵
+        // 准备Pass数据
         m_directional_light_shadow_pass->preparePassData(render_resource);
         m_main_camera_pass->preparePassData(render_resource);
         m_ui_pass->preparePassData(render_resource);
         
-        // 准备渲染前的上下文，包括开始command buffer记录
-         // 准备渲染前环境（检查窗口大小变化，如需重建交换链则返回）
-        bool prepare_success =
-            vulkan_rhi->prepareBeforePass(std::bind(&RenderPipeline::passUpdateAfterRecreateSwapchain, this));  // 交换链重建后回调
-        if (!prepare_success)  // 若prepareBeforePass失败（包括交换链重建或其他错误），当前帧渲染终止
+        // 准备渲染前的上下文
+        bool prepare_success = vulkan_rhi->prepareBeforePass(std::bind(&RenderPipeline::passUpdateAfterRecreateSwapchain, this));
+        if (!prepare_success)
         {
             return;
         }
-        // 1. 首先执行方向光阴影渲染通道（生成阴影贴图）
-        // LOG_INFO("[RenderPipeline] About to call DirectionalLightShadowPass::draw()");
-        static_cast<DirectionalLightShadowPass*>(m_directional_light_shadow_pass.get())
-        ->draw();
-        // LOG_INFO("[RenderPipeline] DirectionalLightShadowPass::draw() completed");
         
-        // 2. 执行光线追踪渲染（监控开始/结束）
+        // 1. 首先执行方向光阴影渲染通道
+        static_cast<DirectionalLightShadowPass*>(m_directional_light_shadow_pass.get())->draw();
+        
+        // 2. 执行光线追踪渲染
         if (m_raytracing_pass && m_raytracing_pass->isRayTracingEnabled())
         {
             m_rt_monitor.begin();
@@ -138,13 +145,9 @@ namespace Elish
                     0, nullptr,
                     0, nullptr
                 );
-                // LOG_DEBUG("[RenderPipeline] Memory barrier added before ray tracing");
 
-                // LOG_DEBUG("[RenderPipeline] About to call preparePassData for ray tracing");
                 m_raytracing_pass->preparePassData(render_resource);
-                // LOG_DEBUG("[RenderPipeline] preparePassData completed, about to call drawRayTracing");
                 m_raytracing_pass->drawRayTracing(vulkan_rhi->m_current_swapchain_image_index);
-                // LOG_DEBUG("[RenderPipeline] drawRayTracing completed successfully");
             } catch (const std::exception& e) {
                 rt_success = false;
                 LOG_ERROR("[RTTask] Exception during ray tracing: {}", e.what());
@@ -164,44 +167,30 @@ namespace Elish
                 LOG_WARN("[RTTask] Frequent RT errors: {} times within 1 minute", m_rt_monitor.error_count_window);
             }
         }
-        else
-        {
-            // LOG_DEBUG("[RenderPipeline] Ray tracing disabled or unavailable");
-        }
 
-        // 3. 执行主相机渲染（包含UI子通道），确保UI在RT之后
+        // 3. 执行主相机渲染
         MainCameraPass& main_camera_pass = *(static_cast<MainCameraPass*>(m_main_camera_pass.get()));
         main_camera_pass.drawForward(vulkan_rhi->m_current_swapchain_image_index);
-        
-        // 4. 可选：复制RT输出到交换链（默认关闭，避免覆盖UI）
-        if (m_rt_copy_enabled) {
-            copyRayTracingOutputToSwapchain(rhi, vulkan_rhi->m_current_swapchain_image_index);
-        }
 
-        // 注意：UI渲染在主相机渲染通道内作为子通道执行，此顺序确保UI在RT之后
-
-        // 提交渲染命令并释放交换链图像
+        // 提交渲染命令
         vulkan_rhi->submitRendering([](){});
     }
     
     /**
      * @brief 将光线追踪输出图像复制到交换链图像
-     * @param rhi RHI接口
-     * @param swapchain_image_index 交换链图像索引
      */
     void RenderPipeline::copyRayTracingOutputToSwapchain(std::shared_ptr<RHI> rhi, uint32_t swapchain_image_index)
     {
-        if (!m_raytracing_pass) {
-            return;
-        }
-        // 若当前帧未执行光线追踪或禁用，则不进行覆盖复制，避免黑图覆盖主渲染与UI
-        if (!m_raytracing_pass->isRayTracingEnabled() || !m_raytracing_pass->didLastFrameTrace())
+        // 若当前帧未执行光线追踪或禁用，则不进行覆盖复制
+        if (!m_raytracing_pass || !m_raytracing_pass->isRayTracingEnabled() || !m_raytracing_pass->didLastFrameTrace())
         {
-            LOG_DEBUG("[RenderPipeline] Skip RT copy: enabled={}, traced_last_frame={}", m_raytracing_pass->isRayTracingEnabled(), m_raytracing_pass->didLastFrameTrace());
+            LOG_DEBUG("[RenderPipeline] Skip RT copy: enabled={}, traced_last_frame={}", 
+                     m_raytracing_pass ? m_raytracing_pass->isRayTracingEnabled() : false, 
+                     m_raytracing_pass ? m_raytracing_pass->didLastFrameTrace() : false);
             return;
         }
 
-        // 获取光线追踪输出图像与当前交换链图像信息
+        // 获取光线追踪输出图像
         RHIImage* rt_image = m_raytracing_pass->getOutputImage();
         if (!rt_image)
         {
@@ -218,7 +207,7 @@ namespace Elish
             return;
         }
 
-        // 准备图像布局转换：确保源为GENERAL、目标为COLOR_ATTACHMENT_OPTIMAL
+        // 准备图像布局转换
         RHIImageMemoryBarrier src_barrier{};
         src_barrier.sType = RHI_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         src_barrier.oldLayout = RHI_IMAGE_LAYOUT_GENERAL;
@@ -243,7 +232,7 @@ namespace Elish
             0, nullptr,
             1, &src_barrier);
 
-        // 包装当前交换链图像为RHIImage以进行拷贝
+        // 包装当前交换链图像
         VulkanRHI* vk_rhi = static_cast<VulkanRHI*>(rhi.get());
         VulkanImage dst_swap_image;
         dst_swap_image.setResource(vk_rhi->m_swapchain_images[swapchain_image_index]);
@@ -311,6 +300,9 @@ namespace Elish
         LOG_DEBUG("[RenderPipeline] Copied ray tracing output image to swapchain image {}", swapchain_image_index);
     }
 
+    /**
+     * @brief 交换链重建后更新Pass
+     */
     void RenderPipeline::passUpdateAfterRecreateSwapchain()
     {
         // 更新方向光阴影渲染通道

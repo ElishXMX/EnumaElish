@@ -82,7 +82,7 @@ namespace Elish {
 	// 为Vertex定义哈希函数
 	struct VertexHash {
 		size_t operator()(Vertex const& vertex) const {
-			return Vec3Hash()(vertex.pos) ^ (Vec3Hash()(vertex.color) << 1) ^ (Vec2Hash()(vertex.texCoord) << 2);
+			return Vec3Hash()(vertex.pos) ^ (Vec3Hash()(vertex.color) << 1) ^ (Vec2Hash()(vertex.texCoord) << 2) ^ (Vec3Hash()(vertex.normal) << 3);
 		}
 	};
 
@@ -305,10 +305,15 @@ namespace Elish {
          */
         void initialize(std::shared_ptr<RHI> rhi) ;
         /**
-         * @brief 获取已加载的模型列表
+         * @brief 获取已加载的模型列表（只读）
          * @return 模型列表的常量引用
          */
         const std::vector<RenderObject>& getLoadedRenderObjects() const { return m_RenderObjects; }
+        /**
+         * @brief 获取已加载的模型列表（可修改）
+         * @return 模型列表的引用
+         */
+        std::vector<RenderObject>& getLoadedRenderObjectsMutable() { return m_RenderObjects; }
          /**
          * @brief 获取模型数量
          * @return 已加载的模型数量

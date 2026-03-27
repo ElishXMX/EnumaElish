@@ -31,6 +31,12 @@ namespace Elish
         std::shared_ptr<RenderPassBase> getMainCameraPass() const { return m_main_camera_pass; }
         
         /**
+         * @brief 获取方向光阴影渲染通道
+         * @return 方向光阴影渲染通道的共享指针
+         */
+        std::shared_ptr<RenderPassBase> getDirectionalLightShadowPass() const { return m_directional_light_shadow_pass; }
+        
+        /**
          * @brief 启用或禁用光线追踪
          * @param enabled 是否启用光线追踪
          */

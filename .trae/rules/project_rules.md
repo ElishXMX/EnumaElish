@@ -48,3 +48,8 @@ Third-party libraries are managed via CMake and located in the `engine/3rdparty`
 
 ## 8. Graphics Interface Usage
 - **RHI Layer**: When interacting with graphics APIs (like Vulkan), always use the interfaces encapsulated by the Render Hardware Interface (RHI) layer. Avoid direct API calls to maintain portability and abstraction.
+
+## 9可以. 可以借鉴的一些优秀开源项目
+https://github.com/CPJ-BO/ToyRenderer
+https://github.com/Code-Guy/Bamboo
+https://github.com/BoomingTech/Piccolo   主要参考Piccolo项目

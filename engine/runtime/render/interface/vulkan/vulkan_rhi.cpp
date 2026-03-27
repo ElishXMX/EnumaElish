@@ -3058,7 +3058,6 @@ namespace Elish
         {
             const auto& rhi_viewport_element = pViewports[i];
             auto& vk_viewport_element = vk_viewport_list[i];
-
             vk_viewport_element.x = rhi_viewport_element.x;
             vk_viewport_element.y = rhi_viewport_element.y;
             vk_viewport_element.width = rhi_viewport_element.width;
@@ -4225,45 +4224,63 @@ namespace Elish
         vmaCreateAllocator(&allocatorCreateInfo, &m_assets_allocator);
     }
 
-    // todo : more descriptorSet
+    /**
+     * @brief 分配描述符集
+     * @param pAllocateInfo 描述符集分配信息
+     * @param pDescriptorSets 输出的描述符集指针
+     * @return 分配成功返回true，失败返回false
+     * @note 当前实现每次只分配单个描述符集，descriptorSetCount必须为1
+     */
     bool VulkanRHI::allocateDescriptorSets(const RHIDescriptorSetAllocateInfo* pAllocateInfo, RHIDescriptorSet* &pDescriptorSets)
     {
-        //descriptor_set_layout
-        int descriptor_set_layout_size = pAllocateInfo->descriptorSetCount;
-        std::vector<VkDescriptorSetLayout> vk_descriptor_set_layout_list(descriptor_set_layout_size);
-        for (int i = 0; i < descriptor_set_layout_size; ++i)
+        if (pAllocateInfo->descriptorSetCount != 1)
         {
-            const auto& rhi_descriptor_set_layout_element = pAllocateInfo->pSetLayouts[i];
-            auto& vk_descriptor_set_layout_element = vk_descriptor_set_layout_list[i];
+            LOG_ERROR("[VulkanRHI::allocateDescriptorSets] Invalid descriptorSetCount: {}. Current implementation only supports allocating 1 descriptor set at a time.", 
+                     pAllocateInfo->descriptorSetCount);
+            return false;
+        }
 
-            vk_descriptor_set_layout_element = ((VulkanDescriptorSetLayout*)rhi_descriptor_set_layout_element)->getResource();
-        };
+        if (!pAllocateInfo->pSetLayouts || !pAllocateInfo->pSetLayouts[0])
+        {
+            LOG_ERROR("[VulkanRHI::allocateDescriptorSets] Descriptor set layout is null!");
+            return false;
+        }
+
+        if (!pAllocateInfo->descriptorPool)
+        {
+            LOG_ERROR("[VulkanRHI::allocateDescriptorSets] Descriptor pool is null!");
+            return false;
+        }
+
+        VkDescriptorSetLayout vk_layout = ((VulkanDescriptorSetLayout*)pAllocateInfo->pSetLayouts[0])->getResource();
+        if (vk_layout == VK_NULL_HANDLE)
+        {
+            LOG_ERROR("[VulkanRHI::allocateDescriptorSets] Vulkan descriptor set layout is VK_NULL_HANDLE!");
+            return false;
+        }
 
         VkDescriptorSetAllocateInfo descriptorset_allocate_info{};
-        descriptorset_allocate_info.sType = (VkStructureType)pAllocateInfo->sType;
-        descriptorset_allocate_info.pNext = (const void*)pAllocateInfo->pNext;
+        descriptorset_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        descriptorset_allocate_info.pNext = nullptr;
         descriptorset_allocate_info.descriptorPool = ((VulkanDescriptorPool*)(pAllocateInfo->descriptorPool))->getResource();
-        descriptorset_allocate_info.descriptorSetCount = pAllocateInfo->descriptorSetCount;
-        descriptorset_allocate_info.pSetLayouts = vk_descriptor_set_layout_list.data();
+        descriptorset_allocate_info.descriptorSetCount = 1;
+        descriptorset_allocate_info.pSetLayouts = &vk_layout;
 
-        std::vector<VkDescriptorSet> vk_descriptor_sets(pAllocateInfo->descriptorSetCount);
-        pDescriptorSets = new VulkanDescriptorSet;
-        VkResult result = vkAllocateDescriptorSets(m_device, &descriptorset_allocate_info, vk_descriptor_sets.data());
-        ((VulkanDescriptorSet*)pDescriptorSets)->setResource(vk_descriptor_sets[0]);
+        VkDescriptorSet vk_descriptor_set = VK_NULL_HANDLE;
+        VkResult result = vkAllocateDescriptorSets(m_device, &descriptorset_allocate_info, &vk_descriptor_set);
 
-        if (result == VK_SUCCESS)
+        if (result == VK_SUCCESS && vk_descriptor_set != VK_NULL_HANDLE)
         {
-            LOG_DEBUG("Successfully allocated {} descriptor sets", pAllocateInfo->descriptorSetCount);
+            pDescriptorSets = new VulkanDescriptorSet;
+            ((VulkanDescriptorSet*)pDescriptorSets)->setResource(vk_descriptor_set);
+            LOG_DEBUG("[VulkanRHI::allocateDescriptorSets] Successfully allocated descriptor set: {}", (void*)vk_descriptor_set);
             return true;
         }
         else
         {
-            LOG_ERROR("vkAllocateDescriptorSets failed with result: {}", static_cast<int>(result));
-            // 清理已分配的内存
-            if (pDescriptorSets) {
-                delete pDescriptorSets;
-                pDescriptorSets = nullptr;
-            }
+            LOG_ERROR("[VulkanRHI::allocateDescriptorSets] vkAllocateDescriptorSets failed with result: {} (VK_ERROR_OUT_OF_POOL_MEMORY=-1000091001, VK_ERROR_FRAGMENTED_POOL=-1000161000)", 
+                     static_cast<int>(result));
+            pDescriptorSets = nullptr;
             return false;
         }
     }

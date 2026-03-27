@@ -196,7 +196,7 @@ namespace Elish
 
     private:
         // 光线追踪状态
-        bool m_ray_tracing_enabled = false;  // 默认关闭光线追踪功能，避免影响UI与主渲染
+        bool m_ray_tracing_enabled = true;    // 启用光线追踪功能进行调试
         bool m_is_initialized = false;
 
         // 光线追踪参数

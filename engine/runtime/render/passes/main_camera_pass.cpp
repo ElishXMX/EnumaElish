@@ -27,6 +27,8 @@
 #include "../../shader/generated/cpp/pic_frag.h"
 #include "../../shader/generated/cpp/skybox_new_vert.h"
 #include "../../shader/generated/cpp/skybox_new_frag.h"
+#include "../../shader/generated/cpp/model_vert.h"
+#include "../../shader/generated/cpp/model_frag.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../../../3rdparty/tinyobjloader/examples/viewer/stb_image.h"
@@ -119,43 +121,60 @@ namespace Elish
         
         // Store render resource for later use
         m_render_resource = render_resource;
-        
-        // 🔧 添加默认方向光源到RenderResource（如果还没有的话）
-        if (render_resource && render_resource->getDirectionalLightCount() == 0) {
-            // 创建默认方向光源
-            DirectionalLightData default_light;
-            default_light.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
-            default_light.intensity = 3.0f;
-            default_light.color = glm::vec3(1.0f, 1.0f, 1.0f);
-            default_light.enabled = true;
-            
-            render_resource->addDirectionalLight(default_light);
-            LOG_INFO("[MainCamera] Added default directional light to RenderResource");
-        }
+        LOG_DEBUG("[preparePassData] m_render_resource set to: {}, render_resource parameter: {}", 
+                 (void*)m_render_resource.get(), (void*)render_resource.get());
         
         // 获取阴影通道资源并设置到渲染资源中
         auto render_system = g_runtime_global_context.m_render_system;
         if (render_system) {
-            auto render_pipeline = std::dynamic_pointer_cast<RenderPipeline>(render_system->getRenderPipeline());
+            auto render_pipeline = render_system->getRenderPipeline();
             if (render_pipeline) {
-                auto shadow_pass = render_pipeline->getDirectionalLightShadowPass();
-                if (shadow_pass) {
-                    // 获取阴影贴图资源
-                    auto shadow_image_view = shadow_pass->getShadowMapView();
-                    auto shadow_sampler = shadow_pass->getShadowMapSampler();
-                    
-                    if (shadow_image_view && shadow_sampler) {
-                        // 设置阴影贴图资源到渲染资源中
-                        render_resource->setDirectionalLightShadowResources(shadow_image_view, shadow_sampler);
+                auto shadow_pass_base = render_pipeline->getDirectionalLightShadowPass();
+                if (shadow_pass_base) {
+                    // 转换为 DirectionalLightShadowPass 类型
+                    auto shadow_pass = std::dynamic_pointer_cast<DirectionalLightShadowPass>(shadow_pass_base);
+                    if (shadow_pass) {
+                        // 获取阴影贴图资源
+                        auto shadow_image_view = shadow_pass->getShadowMapView();
+                        auto shadow_sampler = shadow_pass->getShadowMapSampler();
+                        
+                        LOG_DEBUG("[MainCameraPass::preparePassData] Shadow resources: imageView={}, sampler={}", 
+                                 (void*)shadow_image_view, (void*)shadow_sampler);
+                        
+                        if (shadow_image_view && shadow_sampler) {
+                            // 设置阴影贴图资源到渲染资源中
+                            render_resource->setDirectionalLightShadowResources(shadow_image_view, shadow_sampler);
+                            LOG_INFO("[MainCameraPass::preparePassData] Successfully set shadow resources to RenderResource");
+                        } else {
+                            LOG_ERROR("[MainCameraPass::preparePassData] Failed to get shadow resources from DirectionalLightShadowPass");
+                        }
+                    } else {
+                        LOG_ERROR("[MainCameraPass::preparePassData] Failed to cast shadow_pass_base to DirectionalLightShadowPass");
                     }
+                } else {
+                    LOG_ERROR("[MainCameraPass::preparePassData] shadow_pass_base is null");
                 }
+            } else {
+                LOG_ERROR("[MainCameraPass::preparePassData] render_pipeline is null");
             }
+        } else {
+            LOG_ERROR("[MainCameraPass::preparePassData] render_system is null");
         }
         
         // Store loaded render objects to avoid repeated access
+        // 只在首次或对象数量变化时更新，避免重复分配描述符集
         if (m_render_resource) {
-            m_loaded_render_objects = m_render_resource->getLoadedRenderObjects();
+            auto currentObjects = m_render_resource->getLoadedRenderObjects();
             
+            // 检查对象列表是否发生变化
+            bool objectsChanged = (currentObjects.size() != m_loaded_render_objects.size());
+            if (objectsChanged && m_model_descriptor_sets_initialized) {
+                LOG_WARN("[preparePassData] Render objects count changed from {} to {}, need to reinitialize descriptor sets",
+                        m_loaded_render_objects.size(), currentObjects.size());
+                m_model_descriptor_sets_initialized = false;
+            }
+            
+            m_loaded_render_objects = currentObjects;
             
             if (!m_loaded_render_objects.empty()) {
                 const auto& renderObject = m_loaded_render_objects[0];
@@ -182,9 +201,31 @@ namespace Elish
         }
         
         // Setup model descriptor set now that textures are available (only once)
+        LOG_DEBUG("[preparePassData] Checking model descriptor set setup: m_loaded_render_objects.size()={}, m_model_descriptor_sets_initialized={}", 
+                 m_loaded_render_objects.size(), m_model_descriptor_sets_initialized);
+        
         if (!m_loaded_render_objects.empty() && !m_model_descriptor_sets_initialized) {
-            setupModelDescriptorSet();
-            m_model_descriptor_sets_initialized = true;
+            // 检查阴影贴图资源是否已设置
+            auto shadowImageView = m_render_resource->getDirectionalLightShadowImageView();
+            auto shadowSampler = m_render_resource->getDirectionalLightShadowImageSampler();
+            LOG_INFO("[preparePassData] Before setupModelDescriptorSet: shadowImageView={}, shadowSampler={}", 
+                     (void*)shadowImageView, (void*)shadowSampler);
+            
+            if (shadowImageView && shadowSampler) {
+                bool success = setupModelDescriptorSet();
+                if (success) {
+                    m_model_descriptor_sets_initialized = true;
+                    LOG_INFO("[preparePassData] Model descriptor sets initialized successfully");
+                } else {
+                    LOG_ERROR("[preparePassData] Model descriptor sets setup failed, will retry next frame");
+                }
+            } else {
+                LOG_WARN("[preparePassData] Shadow resources not ready yet, will retry next frame");
+            }
+        } else if (m_loaded_render_objects.empty()) {
+            LOG_WARN("[preparePassData] m_loaded_render_objects is empty, cannot setup model descriptor sets");
+        } else if (m_model_descriptor_sets_initialized) {
+            LOG_DEBUG("[preparePassData] Model descriptor sets already initialized, skipping");
         }
         
         // 天空盒描述符集将在首次渲染时延迟初始化
@@ -610,6 +651,76 @@ namespace Elish
             throw std::runtime_error("create skybox descriptor set layout");
         }
 
+        // === 创建模型渲染的描述符集布局 ===
+        // 根据mesh.vert和mesh.frag的绑定需求：
+        // binding 0: UBO (view/proj matrices)
+        // binding 1: UBOV (lights info) 
+        // binding 2: Cubemap sampler (IBL)
+        // binding 3-7: Texture samplers (5 textures)
+        // binding 8: Directional light shadow map
+        // binding 9: Light space matrix UBO
+        
+        RHIDescriptorSetLayoutBinding model_bindings[10];
+        
+        // Binding 0: UBO (view/proj matrices)
+        model_bindings[0].binding = 0;
+        model_bindings[0].descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        model_bindings[0].descriptorCount = 1;
+        model_bindings[0].stageFlags = RHI_SHADER_STAGE_VERTEX_BIT | RHI_SHADER_STAGE_FRAGMENT_BIT;
+        model_bindings[0].pImmutableSamplers = nullptr;
+        
+        // Binding 1: UBOV (lights info)
+        model_bindings[1].binding = 1;
+        model_bindings[1].descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        model_bindings[1].descriptorCount = 1;
+        model_bindings[1].stageFlags = RHI_SHADER_STAGE_VERTEX_BIT | RHI_SHADER_STAGE_FRAGMENT_BIT;
+        model_bindings[1].pImmutableSamplers = nullptr;
+        
+        // Binding 2: Cubemap sampler (IBL)
+        model_bindings[2].binding = 2;
+        model_bindings[2].descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        model_bindings[2].descriptorCount = 1;
+        model_bindings[2].stageFlags = RHI_SHADER_STAGE_FRAGMENT_BIT;
+        model_bindings[2].pImmutableSamplers = nullptr;
+        
+        // Binding 3-7: Texture samplers (5 textures)
+        for (int i = 3; i < 8; ++i) {
+            model_bindings[i].binding = i;
+            model_bindings[i].descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            model_bindings[i].descriptorCount = 1;
+            model_bindings[i].stageFlags = RHI_SHADER_STAGE_FRAGMENT_BIT;
+            model_bindings[i].pImmutableSamplers = nullptr;
+        }
+        
+        // Binding 8: Directional light shadow map
+        model_bindings[8].binding = 8;
+        model_bindings[8].descriptorType = RHI_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        model_bindings[8].descriptorCount = 1;
+        model_bindings[8].stageFlags = RHI_SHADER_STAGE_FRAGMENT_BIT;
+        model_bindings[8].pImmutableSamplers = nullptr;
+        
+        // Binding 9: Light space matrix UBO
+        model_bindings[9].binding = 9;
+        model_bindings[9].descriptorType = RHI_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        model_bindings[9].descriptorCount = 1;
+        model_bindings[9].stageFlags = RHI_SHADER_STAGE_VERTEX_BIT;
+        model_bindings[9].pImmutableSamplers = nullptr;
+
+        RHIDescriptorSetLayoutCreateInfo model_layoutInfo{};
+        model_layoutInfo.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        model_layoutInfo.bindingCount = 10;
+        model_layoutInfo.pBindings = model_bindings;
+
+        // 创建模型描述符集布局并存储到m_render_pipelines[2]
+        if (m_render_pipelines.size() < 3) {
+            m_render_pipelines.resize(3);
+        }
+        if (m_rhi->createDescriptorSetLayout(&model_layoutInfo, m_render_pipelines[2].descriptorSetLayout) != RHI_SUCCESS)
+        {
+            throw std::runtime_error("create model descriptor set layout");
+        }
+        
+        LOG_INFO("[setupDescriptorSetLayout] Model descriptor set layout created successfully");
         
     }
     /**
@@ -853,6 +964,129 @@ namespace Elish
         m_rhi->destroyShaderModule(skybox_vert_shader_module);
         m_rhi->destroyShaderModule(skybox_frag_shader_module);
 
+        // === 创建模型渲染管线 (m_render_pipelines[2]) ===
+        LOG_INFO("[setupPipelines] Creating model rendering pipeline...");
+        
+        // 检查模型描述符集布局是否已创建
+        if (!m_render_pipelines[2].descriptorSetLayout) {
+            LOG_ERROR("[setupPipelines] Model descriptor set layout is null! Cannot create model pipeline.");
+            throw std::runtime_error("model descriptor set layout is null");
+        }
+        
+        // 模型管线使用模型描述符集布局
+        RHIDescriptorSetLayout* model_descriptorset_layouts[1] = {m_render_pipelines[2].descriptorSetLayout};
+        
+        // 定义推送常量范围（用于传递模型矩阵）
+        RHIPushConstantRange model_push_constant_range {};
+        model_push_constant_range.stageFlags = RHI_SHADER_STAGE_VERTEX_BIT;
+        model_push_constant_range.offset = 0;
+        model_push_constant_range.size = sizeof(glm::mat4); // 模型变换矩阵
+
+        RHIPipelineLayoutCreateInfo model_pipeline_layout_create_info {};
+        model_pipeline_layout_create_info.sType          = RHI_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        model_pipeline_layout_create_info.setLayoutCount = 1;
+        model_pipeline_layout_create_info.pSetLayouts    = model_descriptorset_layouts;
+        model_pipeline_layout_create_info.pushConstantRangeCount = 1;
+        model_pipeline_layout_create_info.pPushConstantRanges = &model_push_constant_range;
+
+        if (m_rhi->createPipelineLayout(&model_pipeline_layout_create_info, m_render_pipelines[2].pipelineLayout) != RHI_SUCCESS)
+        {
+            throw std::runtime_error("create model pipeline layout");
+        }
+        LOG_INFO("[setupPipelines] Model pipeline layout created successfully");
+
+        // 创建模型着色器模块
+        RHIShader* model_vert_shader_module = m_rhi->createShaderModule(MODEL_VERT);
+        RHIShader* model_frag_shader_module = m_rhi->createShaderModule(MODEL_FRAG);
+
+        RHIPipelineShaderStageCreateInfo model_vert_pipeline_shader_stage_create_info {};
+        model_vert_pipeline_shader_stage_create_info.sType  = RHI_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        model_vert_pipeline_shader_stage_create_info.stage  = RHI_SHADER_STAGE_VERTEX_BIT;
+        model_vert_pipeline_shader_stage_create_info.module = model_vert_shader_module;
+        model_vert_pipeline_shader_stage_create_info.pName  = "main";
+
+        RHIPipelineShaderStageCreateInfo model_frag_pipeline_shader_stage_create_info {};
+        model_frag_pipeline_shader_stage_create_info.sType  = RHI_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        model_frag_pipeline_shader_stage_create_info.stage  = RHI_SHADER_STAGE_FRAGMENT_BIT;
+        model_frag_pipeline_shader_stage_create_info.module = model_frag_shader_module;
+        model_frag_pipeline_shader_stage_create_info.pName  = "main";
+
+        RHIPipelineShaderStageCreateInfo model_shader_stages[] = {model_vert_pipeline_shader_stage_create_info,
+                                                                   model_frag_pipeline_shader_stage_create_info};
+
+        // 模型渲染需要顶点输入状态
+        // 顶点格式：position(vec3) + color(vec3) + texCoord(vec2)
+        RHIPipelineVertexInputStateCreateInfo model_vertex_input_state_create_info {};
+        model_vertex_input_state_create_info.sType = RHI_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        
+        // 顶点绑定描述
+        RHIVertexInputBindingDescription model_binding_description {};
+        model_binding_description.binding = 0;
+        model_binding_description.stride = sizeof(float) * 8; // 3 + 3 + 2
+        model_binding_description.inputRate = RHI_VERTEX_INPUT_RATE_VERTEX;
+        
+        // 顶点属性描述
+        RHIVertexInputAttributeDescription model_attribute_descriptions[3];
+        // Position
+        model_attribute_descriptions[0].binding = 0;
+        model_attribute_descriptions[0].location = 0;
+        model_attribute_descriptions[0].format = RHI_FORMAT_R32G32B32_SFLOAT;
+        model_attribute_descriptions[0].offset = 0;
+        // Color
+        model_attribute_descriptions[1].binding = 0;
+        model_attribute_descriptions[1].location = 1;
+        model_attribute_descriptions[1].format = RHI_FORMAT_R32G32B32_SFLOAT;
+        model_attribute_descriptions[1].offset = sizeof(float) * 3;
+        // TexCoord
+        model_attribute_descriptions[2].binding = 0;
+        model_attribute_descriptions[2].location = 2;
+        model_attribute_descriptions[2].format = RHI_FORMAT_R32G32_SFLOAT;
+        model_attribute_descriptions[2].offset = sizeof(float) * 6;
+        
+        model_vertex_input_state_create_info.vertexBindingDescriptionCount = 1;
+        model_vertex_input_state_create_info.pVertexBindingDescriptions = &model_binding_description;
+        model_vertex_input_state_create_info.vertexAttributeDescriptionCount = 3;
+        model_vertex_input_state_create_info.pVertexAttributeDescriptions = model_attribute_descriptions;
+
+        // 模型渲染深度测试设置：开启深度测试和深度写入
+        RHIPipelineDepthStencilStateCreateInfo model_depth_stencil_create_info {};
+        model_depth_stencil_create_info.sType            = RHI_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        model_depth_stencil_create_info.depthTestEnable  = RHI_TRUE;
+        model_depth_stencil_create_info.depthWriteEnable = RHI_TRUE;
+        model_depth_stencil_create_info.depthCompareOp   = RHI_COMPARE_OP_LESS;
+        model_depth_stencil_create_info.depthBoundsTestEnable = RHI_FALSE;
+        model_depth_stencil_create_info.stencilTestEnable     = RHI_FALSE;
+
+        RHIGraphicsPipelineCreateInfo model_pipelineInfo {};
+        model_pipelineInfo.sType               = RHI_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        model_pipelineInfo.stageCount          = 2;
+        model_pipelineInfo.pStages             = model_shader_stages;
+        model_pipelineInfo.pVertexInputState   = &model_vertex_input_state_create_info;
+        model_pipelineInfo.pInputAssemblyState = &input_assembly_create_info;
+        model_pipelineInfo.pViewportState      = &viewport_state_create_info;
+        model_pipelineInfo.pRasterizationState = &rasterization_state_create_info;
+        model_pipelineInfo.pMultisampleState   = &multisample_state_create_info;
+        model_pipelineInfo.pColorBlendState    = &color_blend_state_create_info;
+        model_pipelineInfo.pDepthStencilState  = &model_depth_stencil_create_info;
+        model_pipelineInfo.layout              = m_render_pipelines[2].pipelineLayout;
+        model_pipelineInfo.renderPass          = m_framebuffer.render_pass;
+        model_pipelineInfo.subpass             = 0;
+        model_pipelineInfo.basePipelineHandle  = RHI_NULL_HANDLE;
+        model_pipelineInfo.pDynamicState       = &dynamic_state_create_info;
+
+        if (m_rhi->createGraphicsPipelines(RHI_NULL_HANDLE,
+            1,
+            &model_pipelineInfo,
+            m_render_pipelines[2].graphicsPipeline) !=
+            RHI_SUCCESS)
+        {
+            throw std::runtime_error("create model graphics pipeline");
+        }
+        m_rhi->destroyShaderModule(model_vert_shader_module);
+        m_rhi->destroyShaderModule(model_frag_shader_module);
+        
+        LOG_INFO("[setupPipelines] Model graphics pipeline created successfully");
+
     }
     /**
      * @brief 设置描述符集。
@@ -1025,22 +1259,42 @@ namespace Elish
         setup_in_progress.store(false);
     }
 
-    void MainCameraPass::setupModelDescriptorSet()//分配模型描述符集
+    bool MainCameraPass::setupModelDescriptorSet()//分配模型描述符集
     {
+        LOG_DEBUG("[setupModelDescriptorSet] Starting, m_render_resource: {}", (void*)m_render_resource.get());
+        
+        if (!m_render_resource) {
+            LOG_ERROR("[setupModelDescriptorSet] m_render_resource is null!");
+            return false;
+        }
+        
+        // 直接获取可修改的渲染对象引用，而不是使用副本
+        auto& renderObjects = m_render_resource->getLoadedRenderObjectsMutable();
+        
+        if (renderObjects.empty()) {
+            LOG_ERROR("[setupModelDescriptorSet] renderObjects is empty!");
+            return false;
+        }
+        
+        // 检查模型描述符集布局是否有效
+        if (m_render_pipelines.size() < 3 || !m_render_pipelines[2].descriptorSetLayout) {
+            LOG_ERROR("[setupModelDescriptorSet] Model descriptor set layout is not initialized! m_render_pipelines.size()={}, layout={}", 
+                     m_render_pipelines.size(), 
+                     (m_render_pipelines.size() >= 3) ? (void*)m_render_pipelines[2].descriptorSetLayout : nullptr);
+            return false;
+        }
         
         uint32_t maxFramesInFlight = m_rhi->getMaxFramesInFlight();
-        
-        
+        bool allSuccess = true;
         
         for (uint32_t frameIndex = 0; frameIndex < maxFramesInFlight; frameIndex++)
         {
             // 获取UBO信息 (所有对象共享)
             if (!uniformBuffers[frameIndex]) {
                 LOG_ERROR("[setupModelDescriptorSet] Uniform buffer is null for frame {}", frameIndex);
+                allSuccess = false;
                 continue;
             }
-            
-            
             
             RHIDescriptorBufferInfo mesh_perframe_storage_buffer_info = {};
             mesh_perframe_storage_buffer_info.offset = 0;
@@ -1055,10 +1309,10 @@ namespace Elish
             
             // Setup texture bindings dynamically for each render object
             bool hasModelTextures = false;
-            if (m_render_resource && !m_loaded_render_objects.empty()) {
+            if (m_render_resource && !renderObjects.empty()) {
                 // 为每一个渲染对象创建独立的描述符集
-                for (size_t objIndex = 0; objIndex < m_loaded_render_objects.size(); ++objIndex) {
-                    auto& renderObject = m_loaded_render_objects[objIndex];
+                for (size_t objIndex = 0; objIndex < renderObjects.size(); ++objIndex) {
+                    auto& renderObject = renderObjects[objIndex];
                     
                     // 确保渲染对象有描述符集数组
                     if (renderObject.descriptorSets.size() != maxFramesInFlight) {
@@ -1066,7 +1320,15 @@ namespace Elish
                     }
                     
                     // 检查是否已经分配过描述符集，避免重复分配
-                    if (renderObject.descriptorSets[frameIndex] == VK_NULL_HANDLE) {
+                    if (renderObject.descriptorSets[frameIndex] == nullptr) {
+                        // 检查描述符集布局是否有效
+                        if (m_render_pipelines.size() < 3 || !m_render_pipelines[2].descriptorSetLayout) {
+                            LOG_ERROR("[setupModelDescriptorSet] Model descriptor set layout is not initialized! m_render_pipelines.size()={}, layout={}", 
+                                     m_render_pipelines.size(), 
+                                     (m_render_pipelines.size() >= 3) ? (void*)m_render_pipelines[2].descriptorSetLayout : nullptr);
+                            continue;
+                        }
+                        
                         // 分配当前对象的描述符集 (使用共享的模型描述符布局)
                         RHIDescriptorSetAllocateInfo object_descriptor_set_alloc_info{};
                         object_descriptor_set_alloc_info.sType = RHI_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1079,6 +1341,7 @@ namespace Elish
                                                                          renderObject.descriptorSets[frameIndex])) {
                             LOG_ERROR("[setupModelDescriptorSet] Failed to allocate descriptor set for object {} frame {}", 
                                      objIndex, frameIndex);
+                            allSuccess = false;
                             continue;
                         }
                         LOG_INFO("[setupModelDescriptorSet] Successfully allocated descriptor set for object {} frame {}", objIndex, frameIndex);
@@ -1126,7 +1389,8 @@ namespace Elish
                         LOG_ERROR("[setupModelDescriptorSet] Cubemap resources are null (imageView: {}, sampler: {}) for object {} frame {}, skipping model rendering", 
                                  (void*)cubemapImageView, (void*)cubemapSampler, objIndex, frameIndex);
                         // 将描述符集标记为无效，避免在drawModels中使用
-                        renderObject.descriptorSets[frameIndex] = VK_NULL_HANDLE;
+                        renderObject.descriptorSets[frameIndex] = nullptr;
+                        allSuccess = false;
                         continue;
                     }
                     
@@ -1155,7 +1419,8 @@ namespace Elish
                         LOG_ERROR("[setupModelDescriptorSet] Shadow map resources are null (imageView: {}, sampler: {}) for object {} frame {}, skipping model rendering", 
                                  (void*)shadowMapImageView, (void*)shadowMapSampler, objIndex, frameIndex);
                         // 将描述符集标记为无效，避免在drawModels中使用
-                        renderObject.descriptorSets[frameIndex] = VK_NULL_HANDLE;
+                        renderObject.descriptorSets[frameIndex] = nullptr;
+                        allSuccess = false;
                         continue;
                     }
                     
@@ -1232,20 +1497,21 @@ namespace Elish
                     
                     // 更新当前对象的描述符集
                     m_rhi->updateDescriptorSets(layout_size, object_descriptor_writes_info.data(), 0, nullptr);
+                    LOG_INFO("[setupModelDescriptorSet] Successfully updated descriptor set for object {} frame {}", objIndex, frameIndex);
                 }
             } else {
                 LOG_ERROR("[setupModelDescriptorSet] No render resource or loaded render objects available");
+                allSuccess = false;
             }
-            
-            if (!hasModelTextures) {
-                LOG_ERROR("[setupModelDescriptorSet] No model textures available, this should not happen");
-                throw std::runtime_error("Model textures not available when setting up model descriptor set");
-            }
-           
-           
         }
         
+        if (allSuccess) {
+            LOG_INFO("[setupModelDescriptorSet] All model descriptor sets created successfully");
+        } else {
+            LOG_ERROR("[setupModelDescriptorSet] Some model descriptor sets failed to create");
+        }
         
+        return allSuccess;
     }
     
     /**
@@ -1336,7 +1602,8 @@ namespace Elish
             
             // 检查描述符集是否有效
             uint32_t currentFrameIndex = m_rhi->getCurrentFrameIndex();
-            if (renderObject.descriptorSets[currentFrameIndex] == VK_NULL_HANDLE) {
+            if (currentFrameIndex >= renderObject.descriptorSets.size() || 
+                renderObject.descriptorSets[currentFrameIndex] == nullptr) {
                 LOG_WARN("[MainCameraPass::drawModels] Model {} has invalid descriptor set for frame {}, skipping", i, currentFrameIndex);
                 continue;
             }

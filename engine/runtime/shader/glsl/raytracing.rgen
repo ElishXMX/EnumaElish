@@ -22,36 +22,33 @@ layout(binding = 2, set = 0) uniform CameraBuffer {
     vec4 lightColor;      // 光源颜色
 } cam;
 
-// 光线负载结构
+// 光线负载
 layout(location = 0) rayPayloadEXT vec3 hitValue;
 
-void main() 
-{
-    // 获取当前像素坐标
-    const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
-    const vec2 inUV = pixelCenter/vec2(gl_LaunchSizeEXT.xy);
+void main() {
+    // 计算像素中心坐标
+    vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(0.5);
+    vec2 inUV = pixelCenter / vec2(gl_LaunchSizeEXT.xy);
     vec2 d = inUV * 2.0 - 1.0;
-
-    // 计算光线起点和方向
-    vec4 origin = cam.viewInverse * vec4(0,0,0,1);
-    vec4 target = cam.projInverse * vec4(d.x, d.y, 1, 1);
-    vec4 direction = cam.viewInverse * vec4(normalize(target.xyz), 0);
-
-    // 初始化光线负载
-    hitValue = vec3(0.0);
-
+    
+    // 计算光线方向
+    vec4 rayOrigin = cam.viewInverse * vec4(0.0, 0.0, 0.0, 1.0);
+    vec4 rayDirection = cam.projInverse * vec4(d.x, d.y, 1.0, 1.0);
+    rayDirection = cam.viewInverse * vec4(normalize(rayDirection.xyz), 0.0);
+    
     // 发射光线
-    traceRayEXT(topLevelAS,           // 加速结构
-               gl_RayFlagsOpaqueEXT,  // 光线标志
-               0xff,                 // 剔除掩码
-               0,                    // sbtRecordOffset
-               0,                    // sbtRecordStride
-               0,                    // missIndex
-               origin.xyz,           // 光线起点
-               0.001,                // tmin
-               direction.xyz,        // 光线方向
-               10000.0,              // tmax
-               0                     // payload location
+    traceRayEXT(
+        topLevelAS,               // 加速结构
+        gl_RayFlagsOpaqueEXT,     // 光线标志
+        0xFF,                     // 实例掩码
+        0,                        // 命中组索引偏移
+        0,                        // 命中组最大数量
+        0,                        // 未命中着色器索引
+        rayOrigin.xyz,            // 光线原点
+        0.001,                    // tmin
+        rayDirection.xyz,          // 光线方向
+        10000.0,                  // tmax
+        0                         // payload location
     );
 
     // 将结果写入输出图像

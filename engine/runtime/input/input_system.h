@@ -90,3 +90,4 @@ namespace Elish
         float m_accumulated_pitch {0.0f};
     };
 } // namespace Elish
+

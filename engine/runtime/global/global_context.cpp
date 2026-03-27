@@ -4,7 +4,7 @@
 #include "../core/log/log_system.h"
 #include "../render/render_system.h"
 #include "../input/input_system.h"
-#include "iostream"
+#include <iostream>
 
 namespace Elish
 {
@@ -17,7 +17,6 @@ namespace Elish
         m_logger_system = std::make_shared<LogSystem>();
         std::cout << "[GLOBAL_CONTEXT] LogSystem created" << std::endl;
 
-        
         m_window_system = std::make_shared<WindowSystem>();
         std::cout << "[GLOBAL_CONTEXT] WindowSystem created" << std::endl;
         WindowCreateInfo window_create_info;
@@ -29,29 +28,21 @@ namespace Elish
         m_input_system->initialize();
         std::cout << "[GLOBAL_CONTEXT] InputSystem initialized" << std::endl;
 
-
         m_render_system = std::make_shared<RenderSystem>();
         std::cout << "[GLOBAL_CONTEXT] RenderSystem created" << std::endl;
         RenderSystemInitInfo render_init_info;
         render_init_info.window_system = m_window_system;
         m_render_system->initialize(render_init_info);
         std::cout << "[GLOBAL_CONTEXT] RenderSystem initialized" << std::endl;
-
-
-
     }
 
     void RuntimeGlobalContext::shutdownSystems()
     {
-        std::cout<<"shutdownSystems"<<std::endl;
+        std::cout << "[GLOBAL_CONTEXT] shutdownSystems" << std::endl;
 
-        // m_render_system.reset();
-
-        // m_window_system.reset();
-
-       
-        // m_logger_system.reset();
-
-       
+        m_render_system.reset();
+        m_input_system.reset();
+        m_window_system.reset();
+        m_logger_system.reset();
     }
 }

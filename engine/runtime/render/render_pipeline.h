@@ -12,6 +12,18 @@ namespace Elish
     class RayTracingPass;
 
     /**
+     * @brief 光线追踪渲染模式枚举
+     * @details 定义光线追踪的不同使用场景
+     */
+    enum class RayTracingMode {
+        DISABLED,           ///< 禁用光线追踪
+        DEBUG_VIEW,         ///< 调试视图：直接显示光线追踪结果
+        REFLECTION_ONLY,    ///< 仅反射：用于反射表面
+        REFRACTION_ONLY,    ///< 仅折射：用于透明材质
+        FULL                ///< 完整模式：反射+折射
+    };
+
+    /**
      * @brief 主渲染管线类
      * @details 负责组织和管理所有渲染通道的执行顺序，包括阴影渲染、主相机渲染和UI渲染
      */
@@ -55,6 +67,18 @@ namespace Elish
          * @return 是否启用光线追踪
          */
         bool isRayTracingEnabled() const override;
+
+        /**
+         * @brief 设置光线追踪渲染模式
+         * @param mode 渲染模式
+         */
+        void setRayTracingMode(RayTracingMode mode) { m_rt_mode = mode; }
+        
+        /**
+         * @brief 获取光线追踪渲染模式
+         * @return 当前渲染模式
+         */
+        RayTracingMode getRayTracingMode() const { return m_rt_mode; }
 
         /**
          * @brief 编辑器布局状态结构体
@@ -110,11 +134,11 @@ namespace Elish
         // 任务队列简化：记录RT完成后的回调（用于触发UI）
         std::function<void()> m_rt_complete_callback;
         
-        // 控制是否在本帧执行RT图像复制到交换链（默认关闭以避免覆盖UI）
-        bool m_rt_copy_enabled = false;
+        // 光线追踪渲染模式（启用调试视图模式进行调试）
+        RayTracingMode m_rt_mode = RayTracingMode::DEBUG_VIEW;
 
         /**
-         * @brief 将光线追踪输出图像复制到交换链图像
+         * @brief 将光线追踪输出图像复制到交换链图像（仅用于调试模式）
          * @param rhi RHI接口
          * @param swapchain_image_index 交换链图像索引
          */
