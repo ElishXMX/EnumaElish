@@ -159,6 +159,8 @@ namespace Elish
         RHIQueue* getGraphicsQueue() const override;
         RHIQueue* getComputeQueue() const override;
         RHISwapChainDesc getSwapchainInfo() override;
+        bool isSwapchainRecreated() override;
+        void resetSwapchainRecreatedFlag() override;
         RHIDepthImageDesc getDepthImageInfo() const override;
         uint8_t getMaxFramesInFlight() const override;
         uint8_t getCurrentFrameIndex() const override;
@@ -214,6 +216,7 @@ namespace Elish
         RHIExtent2D m_swapchain_extent;
         RHIViewport m_viewport;
         RHIRect2D m_scissor;
+        bool m_swapchain_recreated = false; // Flag to indicate swapchain was recreated
 
         RHIFormat m_depth_image_format{ RHI_FORMAT_UNDEFINED };
         RHIImageView* m_depth_image_view = new VulkanImageView();

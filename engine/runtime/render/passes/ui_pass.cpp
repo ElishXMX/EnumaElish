@@ -7,6 +7,8 @@
 #include "../render_pipeline.h"
 #include "../render_system.h"
 #include "../window_system.h"
+#include "../../global/global_context.h"
+#include "../../physics/physics_scene.h"
 #include "main_camera_pass.h"
 
 // ImGui 相关头文件
@@ -79,6 +81,7 @@ namespace Elish
         ImGui::NewFrame();
 
         renderUIContent();
+        renderColliderDebugLines();
 
         ImGui::Render();
         ImDrawData* draw_data = ImGui::GetDrawData();
@@ -229,7 +232,8 @@ namespace Elish
 
     /**
      * @brief 渲染UI内容
-     * 显示模型变换控制界面
+     * @details 实现三栏布局：左侧菜单栏、底部资产栏、右侧属性面板
+     * 输出：渲染完整的编辑器UI界面
      */
     void UIPass::renderUIContent()
     {
@@ -250,6 +254,13 @@ namespace Elish
 
         auto& layoutState = render_pipeline->getEditorLayoutState();
         
+        // Check if swapchain was recreated (window resized)
+        if (m_rhi && m_rhi->isSwapchainRecreated())
+        {
+            layoutState.isViewportDirty = true;
+            m_rhi->resetSwapchainRecreatedFlag();
+        }
+        
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         
         if (!viewport) {
@@ -257,50 +268,78 @@ namespace Elish
             return;
         }
         
-        float& sidebar_width = layoutState.sidebarWidth;
-        bool& sidebar_collapsed = layoutState.isSidebarCollapsed;
+        float& left_sidebar_width = layoutState.leftSidebarWidth;
+        float& right_sidebar_width = layoutState.rightSidebarWidth;
+        float& bottom_panel_height = layoutState.bottomPanelHeight;
+        bool& left_sidebar_collapsed = layoutState.isLeftSidebarCollapsed;
+        bool& right_sidebar_collapsed = layoutState.isRightSidebarCollapsed;
         
-        if (ImGui::GetIO().KeyCtrl) {
-            if (ImGui::IsKeyPressed(ImGuiKey_B)) {
-                sidebar_collapsed = !sidebar_collapsed;
-            }
-            if (!sidebar_collapsed) {
-                if (ImGui::IsKeyDown(ImGuiKey_LeftArrow)) {
-                    sidebar_width = std::max(200.0f, sidebar_width - 5.0f);
-                }
-                if (ImGui::IsKeyDown(ImGuiKey_RightArrow)) {
-                    sidebar_width = std::min(500.0f, sidebar_width + 5.0f);
-                }
-            }
-        }
-
-        static float animated_content_width = sidebar_width;
-        float target_content_width = sidebar_collapsed ? 0.0f : sidebar_width;
-        
-        float animation_speed = 15.0f * ImGui::GetIO().DeltaTime;
-        if (std::abs(animated_content_width - target_content_width) > 0.5f) {
-            animated_content_width += (target_content_width - animated_content_width) * animation_speed;
-            layoutState.isViewportDirty = true;
-        } else {
-            animated_content_width = target_content_width;
-        }
-
-        float splitter_width = (animated_content_width > 1.0f) ? 8.0f : 0.0f;
-        float window_width = 30.0f + animated_content_width + splitter_width + 2.0f;
-        
-        float max_window_width = viewport->WorkSize.x * 0.8f;
-        window_width = std::min(window_width, max_window_width);
-
-        static float bottom_panel_height = 250.0f;
+        const float min_sidebar_width = 200.0f;
+        const float max_sidebar_width = 500.0f;
         const float min_bottom_panel_height = 150.0f;
         const float max_bottom_panel_height = std::max(min_bottom_panel_height, viewport->WorkSize.y * 0.6f);
 
-        layoutState.sceneViewport.x = window_width;
-        layoutState.sceneViewport.y = 0.0f;
-        layoutState.sceneViewport.width = viewport->WorkSize.x - window_width;
-        layoutState.sceneViewport.height = viewport->WorkSize.y - bottom_panel_height;
+        static float animated_left_width = left_sidebar_width;
+        static float animated_right_width = right_sidebar_width;
         
+        float target_left_width = left_sidebar_collapsed ? 0.0f : left_sidebar_width;
+        float target_right_width = right_sidebar_collapsed ? 0.0f : right_sidebar_width;
+        
+        float animation_speed = 15.0f * ImGui::GetIO().DeltaTime;
+        
+        if (std::abs(animated_left_width - target_left_width) > 0.5f) {
+            animated_left_width += (target_left_width - animated_left_width) * animation_speed;
+            layoutState.isViewportDirty = true;
+        } else {
+            animated_left_width = target_left_width;
+        }
+        
+        if (std::abs(animated_right_width - target_right_width) > 0.5f) {
+            animated_right_width += (target_right_width - animated_right_width) * animation_speed;
+            layoutState.isViewportDirty = true;
+        } else {
+            animated_right_width = target_right_width;
+        }
+
+        float left_window_width = 30.0f + animated_left_width + ((animated_left_width > 1.0f) ? 8.0f : 0.0f);
+        float right_window_width = animated_right_width + ((animated_right_width > 1.0f) ? 8.0f : 0.0f);
+        
+        float total_ui_width = left_window_width + right_window_width;
+        float max_ui_width = viewport->WorkSize.x * 0.9f;
+        if (total_ui_width > max_ui_width) {
+            float scale = max_ui_width / total_ui_width;
+            left_window_width *= scale;
+            right_window_width *= scale;
+        }
+
+        layoutState.sceneViewport.x = left_window_width;
+        layoutState.sceneViewport.y = 0.0f;
+        layoutState.sceneViewport.width = viewport->WorkSize.x - left_window_width - right_window_width;
+        layoutState.sceneViewport.height = viewport->WorkSize.y - bottom_panel_height;
         layoutState.isViewportDirty = true;
+
+        // === Render Left Sidebar ===
+        renderLeftSidebar(viewport, layoutState, animated_left_width, left_sidebar_width, 
+                          min_sidebar_width, max_sidebar_width, left_sidebar_collapsed);
+        
+        // === Render Right Property Panel ===
+        renderRightPropertyPanel(viewport, layoutState, animated_right_width, right_sidebar_width,
+                                 min_sidebar_width, max_sidebar_width, right_sidebar_collapsed);
+        
+        // === Render Bottom Asset Panel ===
+        renderBottomAssetPanel(viewport, layoutState, bottom_panel_height, 
+                               min_bottom_panel_height, max_bottom_panel_height, left_window_width, right_window_width);
+    }
+
+    /**
+     * @brief Render left sidebar with scene hierarchy and controls
+     */
+    void UIPass::renderLeftSidebar(ImGuiViewport* viewport, 
+                                    RenderPipeline::EditorLayoutState& layoutState,
+                                    float animated_width, float& sidebar_width,
+                                    float min_width, float max_width, bool& collapsed)
+    {
+        float window_width = 30.0f + animated_width + ((animated_width > 1.0f) ? 8.0f : 0.0f);
         
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(ImVec2(window_width, viewport->WorkSize.y));
@@ -314,22 +353,19 @@ namespace Elish
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         
-        ImGui::Begin("EnumaElish Engine - Main Interface", nullptr, window_flags);
+        ImGui::Begin("Left Panel", nullptr, window_flags);
         ImGui::PopStyleVar(3);
-        
-        const float min_sidebar_width = 200.0f;
-        const float max_sidebar_width = 500.0f;
         
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 0.8f));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.9f, 1.0f));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.1f, 0.4f, 0.7f, 1.0f));
         
-        const char* button_text = sidebar_collapsed ? "▶" : "◀";
-        const char* tooltip_text = sidebar_collapsed ? "Expand Control Panel" : "Collapse Control Panel";
+        const char* button_text = collapsed ? ">" : "<";
+        const char* tooltip_text = collapsed ? "Expand Panel" : "Collapse Panel";
         
         if (ImGui::Button(button_text, ImVec2(30, 40)))
         {
-            sidebar_collapsed = !sidebar_collapsed;
+            collapsed = !collapsed;
         }
         if (ImGui::IsItemHovered())
         {
@@ -338,12 +374,12 @@ namespace Elish
         
         ImGui::PopStyleColor(3);
         
-        if (animated_content_width > 1.0f)
+        if (animated_width > 1.0f)
         {
             ImGui::SameLine(0.0f, 0.0f);
-            ImGui::BeginChild("Sidebar", ImVec2(animated_content_width, 0), true, ImGuiWindowFlags_NoScrollbar);
+            ImGui::BeginChild("LeftSidebar", ImVec2(animated_width, 0), true, ImGuiWindowFlags_NoScrollbar);
             
-            ImGui::TextDisabled("MAIN CONTROLS");
+            ImGui::TextDisabled("Main Control Panel");
             ImGui::Spacing();
             
             {
@@ -355,28 +391,28 @@ namespace Elish
                 }
                 ImGui::Unindent(10.0f);
             }
-        
+            
             ImGui::Spacing();
-        
+            
+            // Scene Hierarchy
             static bool show_hierarchy = true;
-            if (ImGui::CollapsingHeader("🏗️ Hierarchy & Inspector", &show_hierarchy, ImGuiTreeNodeFlags_DefaultOpen))
+            if (ImGui::CollapsingHeader("Scene Hierarchy", &show_hierarchy, ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent(10.0f);
                 
                 if (m_render_resource && !m_render_resource->getLoadedRenderObjects().empty())
                 {
                     auto& renderObjects = m_render_resource->getLoadedRenderObjects();
-                    static int selected_model = 0;
                     
                     ImGui::Text("Scene Objects:");
-                    if (ImGui::BeginListBox("##SceneObjects", ImVec2(-1, 100)))
+                    if (ImGui::BeginListBox("##SceneHierarchyList", ImVec2(-1, 120)))
                     {
                         for (size_t i = 0; i < renderObjects.size(); ++i)
                         {
-                            bool is_selected = (selected_model == static_cast<int>(i));
+                            bool is_selected = (layoutState.selectedObjectIndex == static_cast<int>(i));
                             if (ImGui::Selectable(renderObjects[i].name.c_str(), is_selected))
                             {
-                                selected_model = static_cast<int>(i);
+                                layoutState.selectedObjectIndex = static_cast<int>(i);
                             }
                             if (is_selected)
                             {
@@ -385,74 +421,6 @@ namespace Elish
                         }
                         ImGui::EndListBox();
                     }
-                    
-                    ImGui::Spacing();
-                    ImGui::Separator();
-                    ImGui::Spacing();
-                
-                    if (selected_model >= 0 && selected_model < static_cast<int>(renderObjects.size()))
-                    {
-                        auto& selectedObject = renderObjects[selected_model];
-                        auto& animParams = selectedObject.animationParams;
-                        
-                        ImGui::Text("Inspector: %s", selectedObject.name.c_str());
-                        ImGui::Spacing();
-                        
-                        ImGui::Text("Position");
-                        float position[3] = { animParams.position.x, animParams.position.y, animParams.position.z };
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::DragFloat3("##Position", position, 0.1f))
-                        {
-                            ModelAnimationParams updatedParams = animParams;
-                            updatedParams.position = glm::vec3(position[0], position[1], position[2]);
-                            m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
-                        }
-                        ImGui::PopItemWidth();
-                        
-                        ImGui::Text("Rotation");
-                        float rotation[3] = { 
-                            glm::degrees(animParams.rotation.x), 
-                            glm::degrees(animParams.rotation.y), 
-                            glm::degrees(animParams.rotation.z) 
-                        };
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::DragFloat3("##Rotation", rotation, 1.0f))
-                        {
-                            ModelAnimationParams updatedParams = animParams;
-                            updatedParams.rotation = glm::vec3(
-                                glm::radians(rotation[0]), 
-                                glm::radians(rotation[1]), 
-                                glm::radians(rotation[2])
-                            );
-                            m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
-                        }
-                        ImGui::PopItemWidth();
-                        
-                        ImGui::Text("Scale");
-                        float scale[3] = { animParams.scale.x, animParams.scale.y, animParams.scale.z };
-                        ImGui::PushItemWidth(-1);
-                        if (ImGui::DragFloat3("##Scale", scale, 0.01f, 0.01f, 10.0f))
-                        {
-                            ModelAnimationParams updatedParams = animParams;
-                            updatedParams.scale = glm::vec3(scale[0], scale[1], scale[2]);
-                            m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
-                        }
-                        ImGui::PopItemWidth();
-                        
-                        ImGui::Spacing();
-                        
-                        bool enableAnimation = animParams.enableAnimation;
-                        if (ImGui::Checkbox("Auto Rotate", &enableAnimation))
-                        {
-                            ModelAnimationParams updatedParams = animParams;
-                            updatedParams.enableAnimation = enableAnimation;
-                            if (enableAnimation) {
-                                updatedParams.rotationSpeed = 1.0f;
-                                updatedParams.rotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
-                            }
-                            m_render_resource->updateRenderObjectAnimationParams(selected_model, updatedParams);
-                        }
-                    }
                 }
                 else
                 {
@@ -460,11 +428,12 @@ namespace Elish
                 }
                 ImGui::Unindent(10.0f);
             }
-        
+            
             ImGui::Spacing();
-        
+            
+            // Render Settings
             static bool show_render_settings = true;
-            if (ImGui::CollapsingHeader("🌅 Render Settings", &show_render_settings, ImGuiTreeNodeFlags_DefaultOpen))
+            if (ImGui::CollapsingHeader("Render Settings", &show_render_settings, ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent(10.0f);
                 
@@ -482,9 +451,12 @@ namespace Elish
                     {
                         main_camera_pass->setSkyboxEnabled(enable_skybox);
                     }
+
+                    ImGui::Spacing();
+                    ImGui::Checkbox("Show Colliders", &m_show_colliders);
                     
-                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Background: IBL environment map");
-                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Skybox: 3D environment cube");
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Background: IBL Environment");
+                    ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Skybox: 3D Environment Cube");
                 }
                 else
                 {
@@ -493,104 +465,12 @@ namespace Elish
                 
                 ImGui::Unindent(10.0f);
             }
-        
+            
             ImGui::Spacing();
-        
-            static bool show_raytracing_settings = true;
-            if (ImGui::CollapsingHeader("🌟 Ray Tracing Settings", &show_raytracing_settings, ImGuiTreeNodeFlags_DefaultOpen))
-            {
-                ImGui::Indent(10.0f);
-                
-                auto render_system = g_runtime_global_context.m_render_system;
-                if (render_system)
-                {
-                    auto render_pipeline = render_system->getRenderPipeline();
-                    if (render_pipeline)
-                    {
-                        bool raytracing_enabled = render_pipeline->isRayTracingEnabled();
-                        if (ImGui::Checkbox("Enable Ray Tracing", &raytracing_enabled))
-                        {
-                            render_pipeline->setRayTracingEnabled(raytracing_enabled);
-                        }
-                        
-                        if (raytracing_enabled)
-                        {
-                            ImGui::Spacing();
-                            
-                            static bool enable_reflections = true;
-                            static bool enable_shadows = true;
-                            static bool enable_global_illumination = false;
-                            
-                            ImGui::Text("Effects:");
-                            ImGui::Checkbox("Reflections", &enable_reflections);
-                            ImGui::SameLine();
-                            ImGui::Checkbox("Shadows", &enable_shadows);
-                            ImGui::SameLine();
-                            ImGui::Checkbox("GI", &enable_global_illumination);
-                            
-                            ImGui::Spacing();
-                            
-                            ImGui::Text("Quality:");
-                            static int max_ray_depth = 5;
-                            static int samples_per_pixel = 1;
-                            static float resolution_scale = 1.0f;
-
-                            if (ImGui::Button("Low")) { max_ray_depth = 3; samples_per_pixel = 1; resolution_scale = 0.5f; }
-                            ImGui::SameLine();
-                            if (ImGui::Button("Med")) { max_ray_depth = 5; samples_per_pixel = 2; resolution_scale = 0.75f; }
-                            ImGui::SameLine();
-                            if (ImGui::Button("High")) { max_ray_depth = 8; samples_per_pixel = 4; resolution_scale = 1.0f; }
-                            ImGui::SameLine();
-                            if (ImGui::Button("Ultra")) { max_ray_depth = 10; samples_per_pixel = 8; resolution_scale = 1.0f; }
-                            
-                            ImGui::Spacing();
-                            
-                            if (ImGui::TreeNode("Advanced Parameters"))
-                            {
-                                ImGui::Text("Max Ray Depth:");
-                                ImGui::SliderInt("##MaxRayDepth", &max_ray_depth, 1, 10);
-                                
-                                ImGui::Text("Samples Per Pixel:");
-                                ImGui::SliderInt("##SamplesPerPixel", &samples_per_pixel, 1, 16);
-                                
-                                ImGui::Text("Resolution Scale:");
-                                ImGui::SliderFloat("##ResolutionScale", &resolution_scale, 0.25f, 2.0f, "%.2fx");
-                                
-                                ImGui::Separator();
-                                
-                                static int render_mode = 0;
-                                const char* render_modes[] = { "Hybrid", "Pure RT", "Raster Only" };
-                                ImGui::Combo("Render Mode", &render_mode, render_modes, IM_ARRAYSIZE(render_modes));
-                                
-                                ImGui::TreePop();
-                            }
-                            
-                            if (ImGui::TreeNode("Demo Scenes"))
-                            {
-                                 if (ImGui::Button("Load RT Demo Scene", ImVec2(-1, 0)))
-                                 {
-                                     loadRayTracingDemoScene();
-                                 }
-                                 if (ImGui::Button("Reset Scene", ImVec2(-1, 0)))
-                                 {
-                                     resetToDefaultScene();
-                                 }
-                                 ImGui::TreePop();
-                            }
-                        }
-                        else
-                        {
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "RT is disabled.");
-                        }
-                    }
-                }
-                ImGui::Unindent(10.0f);
-            }
-        
-            ImGui::Spacing();
-        
+            
+            // Light Control
             static bool show_light_control = true;
-            if (ImGui::CollapsingHeader("☀️ Light Control", &show_light_control, ImGuiTreeNodeFlags_DefaultOpen))
+            if (ImGui::CollapsingHeader("Light Control", &show_light_control, ImGuiTreeNodeFlags_DefaultOpen))
             {
                 ImGui::Indent(10.0f);
                 
@@ -601,7 +481,7 @@ namespace Elish
                     {
                         static glm::vec3 light_direction = primary_light->direction;
                         
-                        ImGui::Text("Directional Light Settings:");
+                        ImGui::Text("Directional Light:");
                         ImGui::Spacing();
                         
                         ImGui::Text("Direction:");
@@ -640,231 +520,29 @@ namespace Elish
                         
                         ImGui::Spacing();
                         
-                        static float light_distance = primary_light->distance;
-                        ImGui::Text("Distance (Shadow Range):");
-                        if (ImGui::SliderFloat("##LightDistance", &light_distance, 1.0f, 50.0f, "%.1f"))
-                        {
-                            m_render_resource->updateDirectionalLightDistance(light_distance);
-                        }
-                        
-                        ImGui::Spacing();
-                        
-                        ImGui::Text("📊 Shadow Map Info:");
-                        
-                        float base_scene_radius = 20.0f;
-                        float distance_factor = glm::clamp(light_distance / 20.0f, 0.8f, 3.0f);
-                        float shadow_coverage_radius = base_scene_radius * distance_factor;
-                        float ortho_near = std::max(0.1f, light_distance * 0.1f);
-                        float ortho_far = light_distance + shadow_coverage_radius * 2.0f;
-                        
-                        ImGui::Text("Near Plane: %.2f", ortho_near);
-                        ImGui::Text("Far Plane: %.2f", ortho_far);
-                        ImGui::Text("Coverage Radius: %.2f", shadow_coverage_radius);
-                        ImGui::Text("Depth Range: %.2f", ortho_far - ortho_near);
-                        
-                        ImGui::Spacing();
-                        
                         ImGui::Text("Presets:");
-                        if (ImGui::Button("Top-Down", ImVec2(80, 0)))
+                        if (ImGui::Button("Top", ImVec2(50, 0)))
                         {
                             light_direction = glm::normalize(glm::vec3(0.0f, -1.0f, 0.0f));
                             m_render_resource->updateDirectionalLightDirection(light_direction);
                         }
                         ImGui::SameLine();
-                        if (ImGui::Button("Side", ImVec2(60, 0)))
+                        if (ImGui::Button("Side", ImVec2(50, 0)))
                         {
                             light_direction = glm::normalize(glm::vec3(-1.0f, -0.5f, 0.0f));
                             m_render_resource->updateDirectionalLightDirection(light_direction);
                         }
                         ImGui::SameLine();
-                        if (ImGui::Button("Diagonal", ImVec2(70, 0)))
+                        if (ImGui::Button("Diagonal", ImVec2(60, 0)))
                         {
                             light_direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.5f));
                             m_render_resource->updateDirectionalLightDirection(light_direction);
                         }
-                        
-                        if (ImGui::Button("Reset All", ImVec2(-1, 0)))
-                        {
-                            light_direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.5f));
-                            light_intensity = 1.0f;
-                            light_color = glm::vec3(1.0f, 1.0f, 1.0f);
-                            light_distance = 10.0f;
-                            m_render_resource->updateDirectionalLightDirection(light_direction);
-                            m_render_resource->updateDirectionalLightIntensity(light_intensity);
-                            m_render_resource->updateDirectionalLightColor(light_color);
-                            m_render_resource->updateDirectionalLightDistance(light_distance);
-                        }
-                        
-                        ImGui::Spacing();
-                        
-                        ImGui::Separator();
-                        ImGui::Text("Current Light Info:");
-                        ImGui::Text("Direction: (%.2f, %.2f, %.2f)", light_direction.x, light_direction.y, light_direction.z);
-                        ImGui::Text("Intensity: %.2f", light_intensity);
-                        ImGui::Text("Color: (%.2f, %.2f, %.2f)", light_color.r, light_color.g, light_color.b);
                     }
                     else
                     {
-                        ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "No directional light available");
+                        ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "No directional light");
                     }
-                }
-                else
-                {
-                    ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "Render resource not available");
-                }
-                
-                ImGui::Unindent(10.0f);
-            }
-        
-            ImGui::Spacing();
-        
-            static bool show_scene = true;
-            if (ImGui::CollapsingHeader("🎭 Scene Objects", &show_scene, ImGuiTreeNodeFlags_DefaultOpen))
-            {
-                ImGui::Indent(10.0f);
-                if (m_render_resource && !m_render_resource->getLoadedRenderObjects().empty())
-                {
-                    const auto& renderObjects = m_render_resource->getLoadedRenderObjects();
-                    for (size_t i = 0; i < renderObjects.size(); ++i)
-                    {
-                        const auto& obj = renderObjects[i];
-                        ImGui::BulletText("%s", obj.name.c_str());
-                    }
-                }
-                else
-                {
-                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No objects loaded");
-                }
-                ImGui::Unindent(10.0f);
-            }
-        
-            ImGui::Spacing();
-        
-            static bool show_rt_debug = false;
-            if (ImGui::CollapsingHeader("🔍 Ray Tracing Debug", &show_rt_debug))
-            {
-                ImGui::Indent(10.0f);
-                
-                auto render_system = g_runtime_global_context.m_render_system;
-                if (render_system)
-                {
-                    auto render_pipeline = render_system->getRenderPipeline();
-                    if (render_pipeline && render_pipeline->isRayTracingEnabled())
-                    {
-                        ImGui::Text("📊 RT Status & Performance:");
-                        ImGui::Spacing();
-                        
-                        ImGui::Text("Status: ");
-                        ImGui::SameLine();
-                        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Active");
-                        
-                        static float rt_frame_time = 16.7f;
-                        static float rays_per_second = 125.5f;
-                        static int active_rays = 1920 * 1080;
-                        
-                        ImGui::Text("Frame Time: %.2f ms", rt_frame_time);
-                        ImGui::Text("Rays/Second: %.1fM", rays_per_second);
-                        ImGui::Text("Active Rays: %d", active_rays);
-                        
-                        ImGui::Spacing();
-                        ImGui::Separator();
-                        ImGui::Text("🎨 Debug Visualization:");
-                        ImGui::Spacing();
-                        
-                        static bool show_ray_directions = false;
-                        static bool show_intersection_points = false;
-                        static bool show_bvh_bounds = false;
-                        static bool show_material_ids = false;
-                        static bool show_depth_complexity = false;
-                        
-                        ImGui::Checkbox("Ray Directions", &show_ray_directions);
-                        if (show_ray_directions)
-                        {
-                            ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(Lines)");
-                        }
-                        
-                        ImGui::Checkbox("Intersection Points", &show_intersection_points);
-                        if (show_intersection_points)
-                        {
-                            ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(Dots)");
-                        }
-                        
-                        ImGui::Checkbox("BVH Bounds", &show_bvh_bounds);
-                        if (show_bvh_bounds)
-                        {
-                            ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(Wireframe)");
-                        }
-                        
-                        ImGui::Checkbox("Material IDs", &show_material_ids);
-                        if (show_material_ids)
-                        {
-                            ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(Color Coded)");
-                        }
-                        
-                        ImGui::Checkbox("Depth Complexity", &show_depth_complexity);
-                        if (show_depth_complexity)
-                        {
-                            ImGui::SameLine();
-                            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "(Heat Map)");
-                        }
-                        
-                        ImGui::Spacing();
-                        ImGui::Separator();
-                        ImGui::Text("⚙️ Debug Controls:");
-                        ImGui::Spacing();
-                        
-                        if (ImGui::Button("Capture Frame", ImVec2(120, 0)))
-                        {
-                            LOG_INFO("[RT Debug] Frame capture requested");
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::Button("Export Stats", ImVec2(120, 0)))
-                        {
-                            LOG_INFO("[RT Debug] Stats export requested");
-                        }
-                        
-                        if (ImGui::Button("Reset Counters", ImVec2(-1, 0)))
-                        {
-                            rt_frame_time = 0.0f;
-                            rays_per_second = 0.0f;
-                            LOG_INFO("[RT Debug] Performance counters reset");
-                        }
-                        
-                        ImGui::Spacing();
-                        ImGui::Separator();
-                        ImGui::Text("📈 Memory Usage:");
-                        ImGui::Spacing();
-                        
-                        static float bvh_memory = 45.2f;
-                        static float texture_memory = 128.7f;
-                        static float buffer_memory = 32.1f;
-                        
-                        ImGui::Text("BVH Memory: %.1f MB", bvh_memory);
-                        ImGui::Text("Texture Memory: %.1f MB", texture_memory);
-                        ImGui::Text("Buffer Memory: %.1f MB", buffer_memory);
-                        ImGui::Text("Total RT Memory: %.1f MB", bvh_memory + texture_memory + buffer_memory);
-                        
-                        ImGui::Spacing();
-                        
-                        float total_memory = bvh_memory + texture_memory + buffer_memory;
-                        float memory_usage_ratio = total_memory / 512.0f;
-                        ImGui::Text("Memory Usage:");
-                        ImGui::ProgressBar(memory_usage_ratio, ImVec2(-1, 0), 
-                                         (std::to_string(static_cast<int>(memory_usage_ratio * 100)) + "%").c_str());
-                    }
-                    else
-                    {
-                        ImGui::TextColored(ImVec4(0.8f, 0.6f, 0.2f, 1.0f), "Ray tracing is disabled.");
-                        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "Enable RT to access debug features.");
-                    }
-                }
-                else
-                {
-                    ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "Render system not available");
                 }
                 
                 ImGui::Unindent(10.0f);
@@ -872,13 +550,14 @@ namespace Elish
             
             ImGui::EndChild();
             
-            ImGui::SetCursorPos(ImVec2(30.0f + animated_content_width, 0.0f));
+            // Resize splitter
+            ImGui::SetCursorPos(ImVec2(30.0f + animated_width, 0.0f));
             
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
             
-            ImGui::Button("##splitter", ImVec2(8.0f, -1));
+            ImGui::Button("##left_splitter", ImVec2(8.0f, -1));
             
             ImGui::PopStyleColor(3);
             
@@ -896,91 +575,304 @@ namespace Elish
                 color
             );
 
-            ImGui::GetWindowDrawList()->AddRect(
-                ImGui::GetItemRectMin(), 
-                ImGui::GetItemRectMax(), 
-                ImGui::GetColorU32(ImVec4(0.3f, 0.3f, 0.3f, 0.3f))
-            );
-            
             if (is_hovered)
             {
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-                ImGui::SetTooltip("Drag to resize sidebar");
+                ImGui::SetTooltip("Drag to resize");
             }
             
             if (is_active)
             {
-                 float delta_x = ImGui::GetIO().MouseDelta.x;
-                 sidebar_width += delta_x;
-                 
-                 float max_allowed_width = (viewport->WorkSize.x * 0.8f) - 8.0f;
-                 sidebar_width = std::max(min_sidebar_width, std::min(std::min(max_sidebar_width, max_allowed_width), sidebar_width));
-                 
-                 layoutState.isViewportDirty = true;
-                 animated_content_width = sidebar_width;
+                float delta_x = ImGui::GetIO().MouseDelta.x;
+                sidebar_width += delta_x;
+                
+                float max_allowed_width = (viewport->WorkSize.x * 0.4f) - 8.0f;
+                sidebar_width = std::max(min_width, std::min(std::min(max_width, max_allowed_width), sidebar_width));
+                
+                layoutState.isViewportDirty = true;
             }
         }
         
         ImGui::End();
+    }
 
+    /**
+     * @brief Render right property panel with object inspector
+     */
+    void UIPass::renderRightPropertyPanel(ImGuiViewport* viewport,
+                                          RenderPipeline::EditorLayoutState& layoutState,
+                                          float animated_width, float& sidebar_width,
+                                          float min_width, float max_width, bool& collapsed)
+    {
+        if (animated_width < 1.0f)
         {
-            float asset_panel_x = viewport->WorkPos.x + window_width;
-            float asset_panel_y = viewport->WorkPos.y + viewport->WorkSize.y - bottom_panel_height;
-            float asset_panel_w = viewport->WorkSize.x - window_width;
-            
-            ImGui::SetNextWindowPos(ImVec2(asset_panel_x, asset_panel_y));
-            ImGui::SetNextWindowSize(ImVec2(asset_panel_w, bottom_panel_height));
-            ImGui::SetNextWindowViewport(viewport->ID);
-            
-            ImGuiWindowFlags asset_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | 
-                                          ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-                                          ImGuiWindowFlags_NoBringToFrontOnFocus;
-                                          
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
-            
-            ImGui::Begin("Asset Browser", nullptr, asset_flags);
-            ImGui::PopStyleVar(3);
-            
-            ImGui::SetCursorPos(ImVec2(0, 0));
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
-            ImGui::Button("##hsplitter", ImVec2(-1, 8.0f));
-            ImGui::PopStyleColor();
-            
-            ImGui::GetWindowDrawList()->AddRectFilled(
-                ImGui::GetItemRectMin(), 
-                ImGui::GetItemRectMax(), 
-                ImGui::GetColorU32(ImGui::IsItemHovered() ? ImVec4(0.4f, 0.6f, 0.8f, 0.8f) : ImVec4(0.2f, 0.2f, 0.2f, 0.5f))
-            );
-            
-            if (ImGui::IsItemHovered())
-            {
-                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
-                ImGui::SetTooltip("Drag to resize asset panel");
-            }
-            if (ImGui::IsItemActive())
-            {
-                float delta_y = ImGui::GetIO().MouseDelta.y;
-                bottom_panel_height -= delta_y;
-                bottom_panel_height = std::max(min_bottom_panel_height, std::min(max_bottom_panel_height, bottom_panel_height));
-                
-                layoutState.isViewportDirty = true;
-            }
-            
-            ImGui::SetCursorPosY(10.0f);
-            
-            static bool assetBrowserInitialized = false;
-            if (!assetBrowserInitialized && m_rhi)
-            {
-                AssetBrowserUI::getInstance().initialize(m_rhi);
-                assetBrowserInitialized = true;
-            }
-            
-            AssetBrowserUI::getInstance().render();
-            
-            ImGui::End();
+            return;
         }
+        
+        float panel_x = viewport->WorkPos.x + viewport->WorkSize.x - animated_width;
+        float splitter_width = 8.0f;
+        
+        ImGui::SetNextWindowPos(ImVec2(panel_x - splitter_width, viewport->WorkPos.y));
+        ImGui::SetNextWindowSize(ImVec2(animated_width + splitter_width, viewport->WorkSize.y - layoutState.bottomPanelHeight));
+        ImGui::SetNextWindowViewport(viewport->ID);
+        
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse |
+                                       ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+        
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+        
+        ImGui::Begin("Property Panel", nullptr, window_flags);
+        ImGui::PopStyleVar(3);
+        
+        // Resize splitter
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        
+        ImGui::Button("##right_splitter", ImVec2(8.0f, -1));
+        
+        ImGui::PopStyleColor(3);
+        
+        bool is_hovered = ImGui::IsItemHovered();
+        bool is_active = ImGui::IsItemActive();
+        
+        ImU32 color;
+        if (is_active) color = ImGui::GetColorU32(ImVec4(0.2f, 0.5f, 0.9f, 1.0f));
+        else if (is_hovered) color = ImGui::GetColorU32(ImVec4(0.4f, 0.6f, 0.8f, 0.8f));
+        else color = ImGui::GetColorU32(ImVec4(0.1f, 0.1f, 0.1f, 0.5f));
+        
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImGui::GetItemRectMin(), 
+            ImGui::GetItemRectMax(), 
+            color
+        );
+        
+        if (is_hovered)
+        {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            ImGui::SetTooltip("Drag to resize");
+        }
+        
+        if (is_active)
+        {
+            float delta_x = ImGui::GetIO().MouseDelta.x;
+            sidebar_width -= delta_x;
+            
+            float max_allowed_width = (viewport->WorkSize.x * 0.4f) - 8.0f;
+            sidebar_width = std::max(min_width, std::min(std::min(max_width, max_allowed_width), sidebar_width));
+            
+            layoutState.isViewportDirty = true;
+        }
+        
+        ImGui::SameLine();
+        
+        ImGui::BeginChild("PropertyContent", ImVec2(animated_width - 5.0f, 0), true);
+        
+        ImGui::TextDisabled("Property Inspector");
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        // Object Properties
+        ImGui::TextDisabled("Object Properties");
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        if (!m_render_resource || layoutState.selectedObjectIndex < 0)
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No object selected");
+        }
+        else
+        {
+            auto& renderObjects = m_render_resource->getLoadedRenderObjects();
+            if (layoutState.selectedObjectIndex >= static_cast<int>(renderObjects.size()))
+            {
+                ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "Selected object does not exist");
+            }
+            else
+            {
+                auto& selectedObject = renderObjects[layoutState.selectedObjectIndex];
+                auto& animParams = selectedObject.animationParams;
+                
+                ImGui::Text("Name: %s", selectedObject.name.c_str());
+                ImGui::Spacing();
+                
+                ImGui::Text("Position");
+                float position[3] = { animParams.position.x, animParams.position.y, animParams.position.z };
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat3("##Position", position, 0.1f))
+                {
+                    ModelAnimationParams updatedParams = animParams;
+                    updatedParams.position = glm::vec3(position[0], position[1], position[2]);
+                    m_render_resource->updateRenderObjectAnimationParams(layoutState.selectedObjectIndex, updatedParams);
+                }
+                ImGui::PopItemWidth();
+                
+                ImGui::Spacing();
+                
+                ImGui::Text("Rotation (Degrees)");
+                float rotation[3] = { 
+                    glm::degrees(animParams.rotation.x), 
+                    glm::degrees(animParams.rotation.y), 
+                    glm::degrees(animParams.rotation.z) 
+                };
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat3("##Rotation", rotation, 1.0f))
+                {
+                    ModelAnimationParams updatedParams = animParams;
+                    updatedParams.rotation = glm::vec3(
+                        glm::radians(rotation[0]), 
+                        glm::radians(rotation[1]), 
+                        glm::radians(rotation[2])
+                    );
+                    m_render_resource->updateRenderObjectAnimationParams(layoutState.selectedObjectIndex, updatedParams);
+                }
+                ImGui::PopItemWidth();
+                
+                ImGui::Spacing();
+                
+                ImGui::Text("Scale");
+                float scale[3] = { animParams.scale.x, animParams.scale.y, animParams.scale.z };
+                ImGui::PushItemWidth(-1);
+                if (ImGui::DragFloat3("##Scale", scale, 0.01f, 0.01f, 10.0f))
+                {
+                    ModelAnimationParams updatedParams = animParams;
+                    updatedParams.scale = glm::vec3(scale[0], scale[1], scale[2]);
+                    m_render_resource->updateRenderObjectAnimationParams(layoutState.selectedObjectIndex, updatedParams);
+                }
+                ImGui::PopItemWidth();
+                
+                ImGui::Spacing();
+                
+                bool enableAnimation = animParams.enableAnimation;
+                if (ImGui::Checkbox("Auto Rotate", &enableAnimation))
+                {
+                    ModelAnimationParams updatedParams = animParams;
+                    updatedParams.enableAnimation = enableAnimation;
+                    if (enableAnimation) {
+                        updatedParams.rotationSpeed = 1.0f;
+                        updatedParams.rotationAxis = glm::vec3(0.0f, 1.0f, 0.0f);
+                    }
+                    m_render_resource->updateRenderObjectAnimationParams(layoutState.selectedObjectIndex, updatedParams);
+                }
+            }
+        }
+        
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        // Asset Binding
+        ImGui::TextDisabled("Asset Binding");
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        if (!m_render_resource || layoutState.selectedObjectIndex < 0)
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No object selected");
+        }
+        else
+        {
+            auto& renderObjects = m_render_resource->getLoadedRenderObjects();
+            if (layoutState.selectedObjectIndex < static_cast<int>(renderObjects.size()))
+            {
+                auto& selectedObject = renderObjects[layoutState.selectedObjectIndex];
+                
+                ImGui::Text("Model Asset:");
+                ImGui::Indent(10.0f);
+                ImGui::TextColored(ImVec4(0.4f, 0.7f, 1.0f, 1.0f), "%s", selectedObject.modelName.c_str());
+                ImGui::Unindent(10.0f);
+                
+                ImGui::Spacing();
+                
+                ImGui::Text("Texture Assets:");
+                ImGui::Indent(10.0f);
+                if (!selectedObject.textureImages.empty())
+                {
+                    for (size_t i = 0; i < selectedObject.textureImages.size(); ++i)
+                    {
+                        ImGui::TextColored(ImVec4(0.7f, 1.0f, 0.4f, 1.0f), "Texture_%zu", i);
+                    }
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.6f, 1.0f), "No textures bound");
+                }
+                ImGui::Unindent(10.0f);
+            }
+        }
+        
+        ImGui::EndChild();
+        
+        ImGui::End();
+    }
+
+    /**
+     * @brief Render bottom asset panel
+     */
+    void UIPass::renderBottomAssetPanel(ImGuiViewport* viewport,
+                                        RenderPipeline::EditorLayoutState& layoutState,
+                                        float& panel_height, float min_height, float max_height,
+                                        float left_width, float right_width)
+    {
+        float panel_x = viewport->WorkPos.x + left_width;
+        float panel_y = viewport->WorkPos.y + viewport->WorkSize.y - panel_height;
+        float panel_w = viewport->WorkSize.x - left_width - right_width;
+        
+        ImGui::SetNextWindowPos(ImVec2(panel_x, panel_y));
+        ImGui::SetNextWindowSize(ImVec2(panel_w, panel_height));
+        ImGui::SetNextWindowViewport(viewport->ID);
+        
+        ImGuiWindowFlags asset_flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | 
+                                      ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                                      ImGuiWindowFlags_NoBringToFrontOnFocus;
+                                      
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+        
+        ImGui::Begin("Asset Browser", nullptr, asset_flags);
+        ImGui::PopStyleVar(3);
+        
+        ImGui::SetCursorPos(ImVec2(0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.0f, 0.0f, 0.0f));
+        ImGui::Button("##hsplitter", ImVec2(-1, 8.0f));
+        ImGui::PopStyleColor();
+        
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            ImGui::GetItemRectMin(), 
+            ImGui::GetItemRectMax(), 
+            ImGui::GetColorU32(ImGui::IsItemHovered() ? ImVec4(0.4f, 0.6f, 0.8f, 0.8f) : ImVec4(0.2f, 0.2f, 0.2f, 0.5f))
+        );
+        
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeNS);
+            ImGui::SetTooltip("Drag to resize");
+        }
+        if (ImGui::IsItemActive())
+        {
+            float delta_y = ImGui::GetIO().MouseDelta.y;
+            panel_height -= delta_y;
+            panel_height = std::max(min_height, std::min(max_height, panel_height));
+            
+            layoutState.isViewportDirty = true;
+        }
+        
+        ImGui::SetCursorPosY(10.0f);
+        
+        static bool assetBrowserInitialized = false;
+        if (!assetBrowserInitialized && m_rhi)
+        {
+            AssetBrowserUI::getInstance().initialize(m_rhi);
+            assetBrowserInitialized = true;
+        }
+        
+        AssetBrowserUI::getInstance().render();
+        
+        ImGui::End();
     }
 
     /**
@@ -1403,6 +1295,126 @@ namespace Elish
         }
         
         LOG_INFO("[UIPass] Scene lighting and objects configuration applied");
+    }
+
+    void UIPass::renderColliderDebugLines()
+    {
+        if (!m_show_colliders)
+        {
+            return;
+        }
+
+        auto physics_scene = g_runtime_global_context.m_physics_scene;
+        if (!physics_scene)
+        {
+            return;
+        }
+
+        auto render_system = g_runtime_global_context.m_render_system;
+        if (!render_system)
+        {
+            return;
+        }
+
+        auto pipeline = std::dynamic_pointer_cast<RenderPipeline>(render_system->getRenderPipeline());
+        if (!pipeline)
+        {
+            return;
+        }
+
+        const auto& layout_state = pipeline->getEditorLayoutState();
+        
+        ImGuiViewport* main_viewport = ImGui::GetMainViewport();
+        float work_pos_x = main_viewport->WorkPos.x;
+        float work_pos_y = main_viewport->WorkPos.y;
+        
+        float viewport_x = work_pos_x + layout_state.sceneViewport.x;
+        float viewport_y = work_pos_y + layout_state.sceneViewport.y;
+        float viewport_width = layout_state.sceneViewport.width;
+        float viewport_height = layout_state.sceneViewport.height;
+
+        if (viewport_width <= 1.0f || viewport_height <= 1.0f)
+        {
+            return;
+        }
+
+        ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+        if (!draw_list)
+        {
+            return;
+        }
+
+        auto main_camera_pass = getMainCameraPassInstance();
+        if (!main_camera_pass || !main_camera_pass->m_camera)
+        {
+            return;
+        }
+
+        const RenderCamera& camera = *main_camera_pass->m_camera;
+        glm::mat4 view_matrix = camera.getViewMatrix();
+        glm::mat4 proj_matrix = camera.getPersProjMatrix();
+
+        static int collider_log_counter = 0;
+        collider_log_counter++;
+        if (collider_log_counter % 30 == 0) {
+            LOG_INFO("[Collider] Matrices:");
+            LOG_INFO("  view[0]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                     view_matrix[0][0], view_matrix[0][1], view_matrix[0][2], view_matrix[0][3]);
+            LOG_INFO("  view[1]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                     view_matrix[1][0], view_matrix[1][1], view_matrix[1][2], view_matrix[1][3]);
+            LOG_INFO("  view[2]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                     view_matrix[2][0], view_matrix[2][1], view_matrix[2][2], view_matrix[2][3]);
+            LOG_INFO("  view[3]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                     view_matrix[3][0], view_matrix[3][1], view_matrix[3][2], view_matrix[3][3]);
+            LOG_INFO("  proj[0]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                     proj_matrix[0][0], proj_matrix[0][1], proj_matrix[0][2], proj_matrix[0][3]);
+            LOG_INFO("  proj[1]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                     proj_matrix[1][0], proj_matrix[1][1], proj_matrix[1][2], proj_matrix[1][3]);
+            LOG_INFO("  proj[2]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                     proj_matrix[2][0], proj_matrix[2][1], proj_matrix[2][2], proj_matrix[2][3]);
+            LOG_INFO("  proj[3]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                     proj_matrix[3][0], proj_matrix[3][1], proj_matrix[3][2], proj_matrix[3][3]);
+        }
+
+        g_runtime_global_context.syncCollidersWithRenderObjects();
+
+#ifdef JPH_DEBUG_RENDERER
+        physics_scene->drawPhysicsBodies(view_matrix, proj_matrix, viewport_width, viewport_height);
+
+        auto debug_renderer = physics_scene->getDebugRenderer();
+        if (debug_renderer)
+        {
+            const auto& debug_lines = debug_renderer->getDebugLines();
+            
+            for (const auto& line : debug_lines)
+            {
+                glm::vec4 start_clip = proj_matrix * view_matrix * glm::vec4(line.start, 1.0f);
+                glm::vec4 end_clip = proj_matrix * view_matrix * glm::vec4(line.end, 1.0f);
+                
+                if (start_clip.w <= 0.001f || end_clip.w <= 0.001f)
+                {
+                    continue;
+                }
+                
+                float start_ndc_x = start_clip.x / start_clip.w;
+                float start_ndc_y = start_clip.y / start_clip.w;
+                float end_ndc_x = end_clip.x / end_clip.w;
+                float end_ndc_y = end_clip.y / end_clip.w;
+                
+                float start_screen_x = viewport_x + (start_ndc_x + 1.0f) * 0.5f * viewport_width;
+                float start_screen_y = viewport_y + (start_ndc_y + 1.0f) * 0.5f * viewport_height;
+                float end_screen_x = viewport_x + (end_ndc_x + 1.0f) * 0.5f * viewport_width;
+                float end_screen_y = viewport_y + (end_ndc_y + 1.0f) * 0.5f * viewport_height;
+                
+                draw_list->AddLine(
+                    ImVec2(start_screen_x, start_screen_y),
+                    ImVec2(end_screen_x, end_screen_y),
+                    line.color,
+                    2.0f
+                );
+            }
+        }
+#endif
     }
 
 } // namespace Elish

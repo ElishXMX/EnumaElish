@@ -75,6 +75,7 @@ namespace Elish
         void onKeyInGameMode(int key, int scancode, int action, int mods);
         void processCameraMovement(float delta_time);
         void processCameraRotation();
+        void triggerPicking();  // 触发拾取操作
 
         unsigned int m_game_command {0};
 

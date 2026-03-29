@@ -121,8 +121,8 @@ namespace Elish
         
         // Store render resource for later use
         m_render_resource = render_resource;
-        LOG_DEBUG("[preparePassData] m_render_resource set to: {}, render_resource parameter: {}", 
-                 (void*)m_render_resource.get(), (void*)render_resource.get());
+        // LOG_DEBUG("[preparePassData] m_render_resource set to: {}, render_resource parameter: {}", 
+        //          (void*)m_render_resource.get(), (void*)render_resource.get());
         
         // 获取阴影通道资源并设置到渲染资源中
         auto render_system = g_runtime_global_context.m_render_system;
@@ -138,13 +138,13 @@ namespace Elish
                         auto shadow_image_view = shadow_pass->getShadowMapView();
                         auto shadow_sampler = shadow_pass->getShadowMapSampler();
                         
-                        LOG_DEBUG("[MainCameraPass::preparePassData] Shadow resources: imageView={}, sampler={}", 
-                                 (void*)shadow_image_view, (void*)shadow_sampler);
+                        // LOG_DEBUG("[MainCameraPass::preparePassData] Shadow resources: imageView={}, sampler={}", 
+                        //          (void*)shadow_image_view, (void*)shadow_sampler);
                         
                         if (shadow_image_view && shadow_sampler) {
                             // 设置阴影贴图资源到渲染资源中
                             render_resource->setDirectionalLightShadowResources(shadow_image_view, shadow_sampler);
-                            LOG_INFO("[MainCameraPass::preparePassData] Successfully set shadow resources to RenderResource");
+                            // LOG_INFO("[MainCameraPass::preparePassData] Successfully set shadow resources to RenderResource");
                         } else {
                             LOG_ERROR("[MainCameraPass::preparePassData] Failed to get shadow resources from DirectionalLightShadowPass");
                         }
@@ -201,21 +201,21 @@ namespace Elish
         }
         
         // Setup model descriptor set now that textures are available (only once)
-        LOG_DEBUG("[preparePassData] Checking model descriptor set setup: m_loaded_render_objects.size()={}, m_model_descriptor_sets_initialized={}", 
-                 m_loaded_render_objects.size(), m_model_descriptor_sets_initialized);
+        // LOG_DEBUG("[preparePassData] Checking model descriptor set setup: m_loaded_render_objects.size()={}, m_model_descriptor_sets_initialized={}", 
+        //          m_loaded_render_objects.size(), m_model_descriptor_sets_initialized);
         
         if (!m_loaded_render_objects.empty() && !m_model_descriptor_sets_initialized) {
             // 检查阴影贴图资源是否已设置
             auto shadowImageView = m_render_resource->getDirectionalLightShadowImageView();
             auto shadowSampler = m_render_resource->getDirectionalLightShadowImageSampler();
-            LOG_INFO("[preparePassData] Before setupModelDescriptorSet: shadowImageView={}, shadowSampler={}", 
-                     (void*)shadowImageView, (void*)shadowSampler);
+            // LOG_INFO("[preparePassData] Before setupModelDescriptorSet: shadowImageView={}, shadowSampler={}", 
+            //          (void*)shadowImageView, (void*)shadowSampler);
             
             if (shadowImageView && shadowSampler) {
                 bool success = setupModelDescriptorSet();
                 if (success) {
                     m_model_descriptor_sets_initialized = true;
-                    LOG_INFO("[preparePassData] Model descriptor sets initialized successfully");
+                    // LOG_INFO("[preparePassData] Model descriptor sets initialized successfully");
                 } else {
                     LOG_ERROR("[preparePassData] Model descriptor sets setup failed, will retry next frame");
                 }
@@ -225,7 +225,7 @@ namespace Elish
         } else if (m_loaded_render_objects.empty()) {
             LOG_WARN("[preparePassData] m_loaded_render_objects is empty, cannot setup model descriptor sets");
         } else if (m_model_descriptor_sets_initialized) {
-            LOG_DEBUG("[preparePassData] Model descriptor sets already initialized, skipping");
+            // LOG_DEBUG("[preparePassData] Model descriptor sets already initialized, skipping");
         }
         
         // 天空盒描述符集将在首次渲染时延迟初始化
@@ -1947,17 +1947,58 @@ namespace Elish
         
         // 创建VP矩阵 (View-Projection, model矩阵现在通过Push Constants传递)
         UniformBufferObject ubo{};
-        // 获取当前窗口尺寸
-        auto swapchainInfo = m_rhi->getSwapchainInfo();
-        float windowWidth = static_cast<float>(swapchainInfo.extent.width);
-        float windowHeight = static_cast<float>(swapchainInfo.extent.height);
-        float aspectRatio = windowWidth / windowHeight;
+        
+        // 获取场景视口尺寸（与碰撞体绘制保持一致）
+        auto render_pipeline_base = g_runtime_global_context.m_render_system ? 
+            g_runtime_global_context.m_render_system->getRenderPipeline() : nullptr;
+        
+        float aspectRatio = 16.0f / 9.0f;  // 默认宽高比
+        
+        if (render_pipeline_base) {
+            auto render_pipeline = std::dynamic_pointer_cast<RenderPipeline>(render_pipeline_base);
+            if (render_pipeline) {
+                auto layout_state = render_pipeline->getEditorLayoutState();
+                float viewport_width = layout_state.sceneViewport.width;
+                float viewport_height = layout_state.sceneViewport.height;
+                if (viewport_width > 1.0f && viewport_height > 1.0f) {
+                    aspectRatio = viewport_width / viewport_height;
+                }
+            }
+        }
 
         // 使用RenderCamera计算视图矩阵和投影矩阵
         if (m_camera) {
-            // 从相机获取视图矩阵和投影矩阵
-            ubo.view = m_camera->getViewMatrix();
-            ubo.proj = m_camera->getPersProjMatrix();
+                // 设置相机的宽高比（使用场景视口的宽高比）
+                m_camera->setAspect(aspectRatio);
+                
+                // 从相机获取视图矩阵和投影矩阵
+                ubo.view = m_camera->getViewMatrix();
+                ubo.proj = m_camera->getPersProjMatrix();
+            
+            static int ubo_log_counter = 0;
+            ubo_log_counter++;
+            if (ubo_log_counter % 30 == 0) {
+                LOG_INFO("[UBO] Frame {} matrices:", currentFrameIndex);
+                LOG_INFO("  view[0]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                         ubo.view[0][0], ubo.view[0][1], ubo.view[0][2], ubo.view[0][3]);
+                LOG_INFO("  view[1]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                         ubo.view[1][0], ubo.view[1][1], ubo.view[1][2], ubo.view[1][3]);
+                LOG_INFO("  view[2]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                         ubo.view[2][0], ubo.view[2][1], ubo.view[2][2], ubo.view[2][3]);
+                LOG_INFO("  view[3]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                         ubo.view[3][0], ubo.view[3][1], ubo.view[3][2], ubo.view[3][3]);
+                LOG_INFO("  proj[0]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                         ubo.proj[0][0], ubo.proj[0][1], ubo.proj[0][2], ubo.proj[0][3]);
+                LOG_INFO("  proj[1]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                         ubo.proj[1][0], ubo.proj[1][1], ubo.proj[1][2], ubo.proj[1][3]);
+                LOG_INFO("  proj[2]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                         ubo.proj[2][0], ubo.proj[2][1], ubo.proj[2][2], ubo.proj[2][3]);
+                LOG_INFO("  proj[3]: ({:.3f},{:.3f},{:.3f},{:.3f})", 
+                         ubo.proj[3][0], ubo.proj[3][1], ubo.proj[3][2], ubo.proj[3][3]);
+                glm::vec3 cam_pos = m_camera->position();
+                LOG_INFO("  camera position: ({:.3f},{:.3f},{:.3f})", 
+                         cam_pos.x, cam_pos.y, cam_pos.z);
+            }
         } else {
             // 如果相机未初始化，使用默认矩阵
             ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));

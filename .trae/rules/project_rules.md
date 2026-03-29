@@ -53,3 +53,5 @@ Third-party libraries are managed via CMake and located in the `engine/3rdparty`
 https://github.com/CPJ-BO/ToyRenderer
 https://github.com/Code-Guy/Bamboo
 https://github.com/BoomingTech/Piccolo   主要参考Piccolo项目
+
+https://github.com/jrouwe/JoltPhysics  我们的物理引擎

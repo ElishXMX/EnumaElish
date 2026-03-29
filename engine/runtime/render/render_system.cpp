@@ -435,10 +435,46 @@ namespace Elish
                 } else {
                     LOG_WARN("Failed to parse animation params for entity '{}'", entity_name);
                 }
-            } else {
-                // 使用默认动画参数
-                model_animation_params[entity_name] = animParams;
             }
+            
+            // 解析 transform 字段（场景配置文件格式）
+            auto transform_json = entity["transform"];
+            if (transform_json.is_object()) {
+                // 解析位置
+                auto position_json = transform_json["position"];
+                if (position_json.is_array() && position_json.array_items().size() >= 3) {
+                    animParams.position = glm::vec3(
+                        static_cast<float>(position_json.array_items()[0].number_value()),
+                        static_cast<float>(position_json.array_items()[1].number_value()),
+                        static_cast<float>(position_json.array_items()[2].number_value())
+                    );
+                    LOG_INFO("[SceneLoader] Entity '{}' position from transform: ({:.3f}, {:.3f}, {:.3f})", 
+                             entity_name, animParams.position.x, animParams.position.y, animParams.position.z);
+                }
+                
+                // 解析旋转
+                auto rotation_json = transform_json["rotation"];
+                if (rotation_json.is_array() && rotation_json.array_items().size() >= 3) {
+                    animParams.rotation = glm::vec3(
+                        glm::radians(static_cast<float>(rotation_json.array_items()[0].number_value())),
+                        glm::radians(static_cast<float>(rotation_json.array_items()[1].number_value())),
+                        glm::radians(static_cast<float>(rotation_json.array_items()[2].number_value()))
+                    );
+                }
+                
+                // 解析缩放
+                auto scale_json = transform_json["scale"];
+                if (scale_json.is_array() && scale_json.array_items().size() >= 3) {
+                    animParams.scale = glm::vec3(
+                        static_cast<float>(scale_json.array_items()[0].number_value()),
+                        static_cast<float>(scale_json.array_items()[1].number_value()),
+                        static_cast<float>(scale_json.array_items()[2].number_value())
+                    );
+                }
+            }
+            
+            // 存储 animation params
+            model_animation_params[entity_name] = animParams;
         }
 
         // 验证加载的数据
@@ -452,7 +488,18 @@ namespace Elish
         return true;
     }
 
-    std::shared_ptr<RenderCamera> RenderSystem::getRenderCamera() const { return m_render_camera; }
+    std::shared_ptr<RenderCamera> RenderSystem::getRenderCamera() const
+    {
+        if (m_render_pipeline)
+        {
+            auto main_camera_pass = std::dynamic_pointer_cast<MainCameraPass>(m_render_pipeline->getMainCameraPass());
+            if (main_camera_pass && main_camera_pass->m_camera)
+            {
+                return main_camera_pass->m_camera;
+            }
+        }
+        return m_render_camera;
+    }
 
     std::shared_ptr<RHI>          RenderSystem::getRHI() const { return m_rhi; }
 

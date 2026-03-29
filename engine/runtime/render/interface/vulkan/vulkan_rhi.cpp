@@ -4585,9 +4585,14 @@ namespace Elish
         createFramebufferImageAndView();
         
         // Update viewport and scissor to match new swapchain extent
-        //视口变化需要动态调整，以适应编辑器功能，此处写死
+        // Note: The viewport will be dynamically set by UIPass based on editor layout
+        // Here we only update the default viewport for fallback cases
+        // The actual rendering viewport is set in MainCameraPass based on EditorLayoutState
         m_viewport = {0.0f, 0.0f, (float)m_swapchain_extent.width, (float)m_swapchain_extent.height, 0.0f, 1.0f};
-
+        m_scissor  = {{0, 0}, m_swapchain_extent};
+        
+        // Mark that swapchain has been recreated, so UI layout needs recalculation
+        m_swapchain_recreated = true;
     }
 
     VkResult VulkanRHI::createDebugUtilsMessengerEXT(VkInstance                                instance,
@@ -4877,6 +4882,17 @@ namespace Elish
         desc.imageViews = m_swapchain_imageviews;
         return desc;
     }
+    
+    bool VulkanRHI::isSwapchainRecreated()
+    {
+        return m_swapchain_recreated;
+    }
+    
+    void VulkanRHI::resetSwapchainRecreatedFlag()
+    {
+        m_swapchain_recreated = false;
+    }
+    
     RHIDepthImageDesc VulkanRHI::getDepthImageInfo() const
     {
         RHIDepthImageDesc desc;

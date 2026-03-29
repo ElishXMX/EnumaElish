@@ -139,6 +139,9 @@ namespace Elish
             {
                 app->m_width  = width;
                 app->m_height = height;
+                
+                // Trigger window size change callback
+                app->onWindowSize(width, height);
             }
         }
         static void windowCloseCallback(GLFWwindow* window) 

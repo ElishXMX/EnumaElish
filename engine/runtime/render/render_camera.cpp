@@ -43,7 +43,7 @@ namespace Elish
         // 偏航角独立发生
         // 这防止了滚转
         glm::quat pitch = glm::angleAxis(radians_delta.x, X);
-        glm::quat yaw = glm::angleAxis(radians_delta.y, Z);
+        glm::quat yaw = glm::angleAxis(radians_delta.y, Y);
 
         m_rotation = pitch * m_rotation * yaw;
         m_invRotation = glm::conjugate(m_rotation);
@@ -79,7 +79,7 @@ namespace Elish
         m_invRotation = glm::conjugate(m_rotation);
     }
 
-    glm::mat4 RenderCamera::getViewMatrix()
+    glm::mat4 RenderCamera::getViewMatrix() const
     {
         std::lock_guard<std::mutex> lock_guard(m_view_matrix_mutex);
         if (m_current_camera_type == RenderCameraType::Motor)

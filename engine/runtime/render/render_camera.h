@@ -66,7 +66,7 @@ namespace Elish
         glm::vec3 up() const { return m_invRotation * Y; }          // Y轴向上  
         glm::vec3 right() const { return m_invRotation * X; }       // X轴向右
         glm::vec2 getFOV() const { return {m_fovx, m_fovy}; }
-        glm::mat4 getViewMatrix();
+        glm::mat4 getViewMatrix() const;
         glm::mat4 getPersProjMatrix() const;
         glm::mat4 getLookAtMatrix() const { return glm::lookAt(position(), position() + forward(), up()); }
         float     getFovYDeprecated() const { return m_fovy; }
@@ -76,7 +76,7 @@ namespace Elish
         float m_fovx {89.0f};
         float m_fovy {0.f};
 
-        std::mutex m_view_matrix_mutex;
+        mutable std::mutex m_view_matrix_mutex;
     };
 
     inline const glm::vec3 RenderCamera::X = {1.0f, 0.0f, 0.0f};

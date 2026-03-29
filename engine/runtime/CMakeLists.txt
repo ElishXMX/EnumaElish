@@ -35,13 +35,16 @@ target_compile_options(${TARGET_NAME} PUBLIC
 # 源文件编码：统一为UTF-8，避免宽字符/表情符号等在MSVC下解析错误
 target_compile_options(${TARGET_NAME} PRIVATE "$<$<CXX_COMPILER_ID:MSVC>:/utf-8>")
 
+# Jolt Physics Debug Renderer 宏定义
+target_compile_definitions(${TARGET_NAME} PUBLIC JPH_DEBUG_RENDERER)
+
 # 依赖库链接配置
 target_link_libraries(${TARGET_NAME} PUBLIC spdlog::spdlog)  # 日志库
 target_link_libraries(${TARGET_NAME} PRIVATE tinyobjloader stb) # 模型加载库
 target_link_libraries(${TARGET_NAME} PUBLIC glfw)           # 窗口管理
 target_link_libraries(${TARGET_NAME} PUBLIC glm)           # 数学库
 target_link_libraries(${TARGET_NAME} PUBLIC imgui)          # GUI库
-# target_link_libraries(${TARGET_NAME} PUBLIC Jolt)           # 物理引擎
+target_link_libraries(${TARGET_NAME} PUBLIC Jolt)           # 物理引擎
 # target_link_libraries(${TARGET_NAME} PUBLIC lua_static sol2) # Lua脚本
 target_link_libraries(${TARGET_NAME} PUBLIC ${vulkan_lib})  # Vulkan库
 target_link_libraries(${TARGET_NAME} PRIVATE $<BUILD_INTERFACE:json11>) # JSON库

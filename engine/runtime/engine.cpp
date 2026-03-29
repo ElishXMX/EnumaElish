@@ -22,7 +22,7 @@ namespace Elish
         while (!window_system->shouldClose())
         {
             const float delta_time = calculateDeltaTime();//计算下一帧
-            // Sleep(1000 / 60); //使用Windows API的Sleep函数来控制帧率 - 修复：应该是1000/60而不是10000/60
+            Sleep(1000 / 60); //使用Windows API的Sleep函数来控制帧率 - 修复：应该是1000/60而不是10000/60
             tickOneFrame(delta_time);//窗口启动后继续
      }
     }
@@ -94,6 +94,9 @@ namespace Elish
         
         g_runtime_global_context.m_input_system->tick();
         // LOG_DEBUG("[Engine] logicalTick input system tick completed");
+        
+        // 每帧同步碰撞体位置与渲染对象
+        g_runtime_global_context.syncCollidersWithRenderObjects();
      }
 
     bool Engine::rendererTick(float delta_time)

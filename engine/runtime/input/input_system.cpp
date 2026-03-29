@@ -8,6 +8,8 @@
 #include "../render/window_system.h"
 #include "../render/passes/ui_pass.h"
 #include "../render/render_pipeline.h"
+#include "../picking/picking_system.h"
+#include "../physics/physics_scene.h"
 
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -182,6 +184,12 @@ namespace Elish
             }
             else if (action == GLFW_RELEASE)
             {
+                // 如果不是拖动，则触发拾取
+                if (!m_is_dragging)
+                {
+                    triggerPicking();
+                }
+                
                 m_mouse_left_pressed = false;
                 m_is_dragging = false;
             }
@@ -432,4 +440,78 @@ namespace Elish
         glm::mat4 translation_matrix = glm::translate(glm::mat4(1.0f), -m_camera_position);
         return rotation_matrix * translation_matrix;
     }
+
+    /**
+     * @brief 触发拾取操作
+     * 
+     * 执行流程：
+     * 1. 获取场景视口的位置和尺寸
+     * 2. 将窗口坐标转换为视口相对坐标
+     * 3. 检查点击是否在场景视口内
+     * 4. 使用视口坐标进行射线检测
+     */
+    void InputSystem::triggerPicking()
+    {
+        LOG_INFO("[Picking Trigger] Mouse click event triggers picking operation");
+
+        auto& picking_system = g_runtime_global_context.m_picking_system;
+        auto& render_system = g_runtime_global_context.m_render_system;
+        auto& window_system = g_runtime_global_context.m_window_system;
+        
+        if (!picking_system || !render_system || !window_system)
+        {
+            LOG_ERROR("[Picking Trigger] Error: Systems not initialized (picking={}, render={}, window={})", 
+                     (bool)picking_system, (bool)render_system, (bool)window_system);
+            return;
+        }
+
+        auto pipeline = std::dynamic_pointer_cast<RenderPipeline>(render_system->getRenderPipeline());
+        if (!pipeline)
+        {
+            LOG_ERROR("[Picking Trigger] Error: Cannot get render pipeline");
+            return;
+        }
+
+        const auto& layout_state = pipeline->getEditorLayoutState();
+        float viewport_x = layout_state.sceneViewport.x;
+        float viewport_y = layout_state.sceneViewport.y;
+        float viewport_width = layout_state.sceneViewport.width;
+        float viewport_height = layout_state.sceneViewport.height;
+
+        LOG_INFO("[Picking Trigger] Scene viewport: x={:.1f}, y={:.1f}, w={:.1f}, h={:.1f}", 
+                 viewport_x, viewport_y, viewport_width, viewport_height);
+
+        if (viewport_width <= 1.0f || viewport_height <= 1.0f)
+        {
+            LOG_ERROR("[Picking Trigger] Error: Invalid viewport size");
+            return;
+        }
+
+        float window_cursor_x = static_cast<float>(m_last_cursor_x);
+        float window_cursor_y = static_cast<float>(m_last_cursor_y);
+
+        float viewport_cursor_x = window_cursor_x - viewport_x;
+        float viewport_cursor_y = window_cursor_y - viewport_y;
+
+        LOG_INFO("[Picking Trigger] Window coords: ({:.1f}, {:.1f})", window_cursor_x, window_cursor_y);
+        LOG_INFO("[Picking Trigger] Viewport coords: ({:.1f}, {:.1f})", viewport_cursor_x, viewport_cursor_y);
+
+        if (viewport_cursor_x < 0.0f || viewport_cursor_x > viewport_width ||
+            viewport_cursor_y < 0.0f || viewport_cursor_y > viewport_height)
+        {
+            LOG_INFO("[Picking Trigger] Click not in scene viewport, skipping picking");
+            return;
+        }
+
+        auto camera = render_system->getRenderCamera();
+        if (!camera)
+        {
+            LOG_ERROR("[Picking Trigger] Error: Cannot get render camera");
+            return;
+        }
+
+        picking_system->pickFromScreen(viewport_cursor_x, viewport_cursor_y, 
+                                       viewport_width, viewport_height, *camera);
+    }
+
 } // namespace Elish

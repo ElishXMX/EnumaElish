@@ -35,6 +35,7 @@ namespace Elish
          std::shared_ptr<RenderCamera> getRenderCamera() const;
          std::shared_ptr<RHI>          getRHI() const;
          std::shared_ptr<RenderPipelineBase> getRenderPipeline() const;
+         std::shared_ptr<RenderResource> getRenderResource() const { return m_render_resource; }
     private:
          /**
           * @brief Load content resources from the content directory

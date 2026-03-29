@@ -82,12 +82,16 @@ namespace Elish
 
         /**
          * @brief 编辑器布局状态结构体
+         * @details 管理三栏布局：左侧菜单栏、底部资产栏、右侧属性面板
          */
         struct EditorLayoutState {
-            float sidebarWidth = 300.0f;        // 侧边栏宽度
-            float assetPanelHeight = 200.0f;    // 底部资产面板高度
-            bool isSidebarCollapsed = false;    // 侧边栏是否折叠
-            bool isAssetPanelCollapsed = false; // 资产面板是否折叠
+            float leftSidebarWidth = 280.0f;    // 左侧菜单栏宽度
+            float rightSidebarWidth = 320.0f;   // 右侧属性面板宽度
+            float bottomPanelHeight = 200.0f;   // 底部资产面板高度
+            
+            bool isLeftSidebarCollapsed = false;   // 左侧菜单栏是否折叠
+            bool isRightSidebarCollapsed = false;  // 右侧属性面板是否折叠
+            bool isBottomPanelCollapsed = false;   // 底部资产面板是否折叠
 
             // 计算出的渲染视口区域 (每一帧由 UIPass 更新)
             struct ViewportRect {
@@ -99,6 +103,9 @@ namespace Elish
             
             // 视口尺寸改变标志 (用于触发相机投影矩阵更新)
             bool isViewportDirty = true;
+            
+            // 当前选中的物体索引 (-1表示未选中)
+            int selectedObjectIndex = -1;
         };
 
         /**

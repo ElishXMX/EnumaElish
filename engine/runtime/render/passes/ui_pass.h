@@ -2,17 +2,21 @@
 
 #include "../render_pass.h"
 #include "../render_resource.h"
+#include "../render_pipeline.h"
 #include <memory>
 
 // 前向声明
 #include <vulkan/vulkan.h>
+
+struct ImGuiViewport;
+struct ImVec2;
 
 namespace Elish
 {
     class WindowUI;
     class VulkanRHI;
     class RHIRenderPass;
-
+    
     struct UIPassInitInfo : RenderPassInitInfo
     {
         RHIRenderPass* render_pass;
@@ -123,6 +127,93 @@ namespace Elish
         void renderUIContent();
         
         /**
+         * @brief 渲染左侧菜单栏
+         * @param viewport ImGui视口
+         * @param layoutState 布局状态
+         * @param animated_width 动画宽度
+         * @param sidebar_width 侧边栏宽度
+         * @param min_width 最小宽度
+         * @param max_width 最大宽度
+         * @param collapsed 是否折叠
+         * 输出：渲染左侧菜单栏UI
+         */
+        void renderLeftSidebar(ImGuiViewport* viewport, 
+                               RenderPipeline::EditorLayoutState& layoutState,
+                               float animated_width, float& sidebar_width,
+                               float min_width, float max_width, bool& collapsed);
+        
+        /**
+         * @brief 渲染右侧属性面板
+         * @param viewport ImGui视口
+         * @param layoutState 布局状态
+         * @param animated_width 动画宽度
+         * @param sidebar_width 侧边栏宽度
+         * @param min_width 最小宽度
+         * @param max_width 最大宽度
+         * @param collapsed 是否折叠
+         * 输出：渲染右侧属性面板UI
+         */
+        void renderRightPropertyPanel(ImGuiViewport* viewport,
+                                      RenderPipeline::EditorLayoutState& layoutState,
+                                      float animated_width, float& sidebar_width,
+                                      float min_width, float max_width, bool& collapsed);
+        
+        /**
+         * @brief 渲染底部资产面板
+         * @param viewport ImGui视口
+         * @param layoutState 布局状态
+         * @param panel_height 面板高度
+         * @param min_height 最小高度
+         * @param max_height 最大高度
+         * @param left_width 左侧宽度
+         * @param right_width 右侧宽度
+         * 输出：渲染底部资产面板UI
+         */
+        void renderBottomAssetPanel(ImGuiViewport* viewport,
+                                    RenderPipeline::EditorLayoutState& layoutState,
+                                    float& panel_height, float min_height, float max_height,
+                                    float left_width, float right_width);
+        
+        /**
+         * @brief 渲染场景层级面板
+         * @param layoutState 布局状态
+         * 输出：渲染场景层级列表
+         */
+        void renderSceneHierarchy(RenderPipeline::EditorLayoutState& layoutState);
+        
+        /**
+         * @brief 渲染渲染设置面板
+         * 输出：渲染渲染设置UI
+         */
+        void renderRenderSettings();
+        
+        /**
+         * @brief 渲染光线追踪设置面板
+         * 输出：渲染光线追踪设置UI
+         */
+        void renderRayTracingSettings();
+        
+        /**
+         * @brief 渲染灯光控制面板
+         * 输出：渲染灯光控制UI
+         */
+        void renderLightControl();
+        
+        /**
+         * @brief 渲染物体属性检查器
+         * @param layoutState 布局状态
+         * 输出：渲染选中物体的属性编辑器
+         */
+        void renderObjectInspector(RenderPipeline::EditorLayoutState& layoutState);
+        
+        /**
+         * @brief 渲染资产绑定信息
+         * @param layoutState 布局状态
+         * 输出：渲染选中物体的资产绑定信息
+         */
+        void renderAssetBindingInfo(RenderPipeline::EditorLayoutState& layoutState);
+        
+        /**
          * @brief 保存模型配置到JSON文件
          */
         void saveModelConfiguration();
@@ -144,9 +235,22 @@ namespace Elish
          */
         void cleanup();
 
+        /**
+         * @brief 检测是否显示碰撞体调试线
+         * @return true if collider debug visualization is enabled
+         */
+        bool isShowColliders() const { return m_show_colliders; }
+
     private:
+        /**
+         * @brief 渲染碰撞体调试线
+         * 在当前ImGui窗口中绘制所有碰撞体的边框线
+         */
+        void renderColliderDebugLines();
+
         WindowUI* m_window_ui = nullptr;                           ///< 窗口UI管理器
         std::shared_ptr<RenderResource> m_render_resource;         ///< 渲染资源管理器
         bool m_imgui_initialized = false;                         ///< ImGui是否已初始化
+        bool m_show_colliders = false;                            ///< 是否显示碰撞体调试线
     };
 } // namespace Elish
